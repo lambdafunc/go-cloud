@@ -21,7 +21,7 @@ require (
 	cloud.google.com/go/firestore v1.5.0
 	cloud.google.com/go/kms v0.1.0
 	cloud.google.com/go/monitoring v0.1.0 // indirect
-	cloud.google.com/go/pubsub v1.16.0
+	cloud.google.com/go/pubsub v1.17.0
 	cloud.google.com/go/secretmanager v0.1.0
 	cloud.google.com/go/storage v1.16.1
 	cloud.google.com/go/trace v0.1.0 // indirect
