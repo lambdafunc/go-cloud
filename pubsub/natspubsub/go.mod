@@ -18,8 +18,8 @@ go 1.12
 
 require (
 	github.com/google/go-cmp v0.5.6
-	github.com/nats-io/nats-server/v2 v2.3.4
-	github.com/nats-io/nats.go v1.12.0
+	github.com/nats-io/nats-server/v2 v2.6.1
+	github.com/nats-io/nats.go v1.12.3
 	gocloud.dev v0.24.0
 )
 
