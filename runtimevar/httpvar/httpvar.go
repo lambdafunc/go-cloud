@@ -15,28 +15,31 @@
 // Package httpvar provides a runtimevar implementation with variables
 // backed by http endpoint. Use OpenVariable to construct a *runtimevar.Variable.
 //
-// URLs
+// # URLs
 //
 // For runtimevar.OpenVariable, httpvar registers for the schemes "http" and
 // "https". The default URL opener will use http.DefaultClient.
+// To use HTTP Basic Auth for the requests, set the environment variables
+// "HTTPVAR_AUTH_USERNAME" and "HTTPVAR_AUTH_PASSWORD".
 // To customize the URL opener, or for more details on the URL format,
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // httpvar exposes the following types for As:
-//  - Snapshot: *http.Response
-//  - Error: httpvar.RequestError, url.Error
+//   - Snapshot: *http.Response
+//   - Error: httpvar.RequestError, url.Error
 package httpvar // import "gocloud.dev/runtimevar/httpvar"
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"gocloud.dev/gcerrors"
@@ -60,7 +63,9 @@ var Schemes = []string{"http", "https"}
 // The full URL, including scheme, is used as the endpoint, except that the
 // the following URL parameters are removed if present:
 //   - decoder: The decoder to use. Defaults to runtimevar.BytesDecoder.
-//       See runtimevar.DecoderByName for supported values.
+//     See runtimevar.DecoderByName for supported values.
+//   - wait: The poll interval, in time.ParseDuration formats.
+//     Defaults to 30s.
 type URLOpener struct {
 	// The Client to use; required.
 	Client *http.Client
@@ -85,11 +90,20 @@ func (o *URLOpener) OpenVariableURL(ctx context.Context, u *url.URL) (*runtimeva
 	if err != nil {
 		return nil, fmt.Errorf("open variable %v: invalid decoder: %v", u, err)
 	}
+	opts := o.Options
+	if s := q.Get("wait"); s != "" {
+		q.Del("wait")
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, fmt.Errorf("open variable %v: invalid wait %q: %v", u, s, err)
+		}
+		opts.WaitDuration = d
+	}
 	// See if we changed the query parameters.
 	if rawq := q.Encode(); rawq != u.Query().Encode() {
 		u2.RawQuery = rawq
 	}
-	return OpenVariable(o.Client, u2.String(), decoder, &o.Options)
+	return OpenVariable(o.Client, u2.String(), decoder, &opts)
 }
 
 // Options sets options.
@@ -124,7 +138,7 @@ func OpenVariable(client *http.Client, urlStr string, decoder *runtimevar.Decode
 }
 
 type state struct {
-	val        interface{}
+	val        any
 	raw        *http.Response
 	rawBytes   []byte
 	updateTime time.Time
@@ -132,7 +146,7 @@ type state struct {
 }
 
 // Value implements driver.State.Value.
-func (s *state) Value() (interface{}, error) {
+func (s *state) Value() (any, error) {
 	return s.val, s.err
 }
 
@@ -142,7 +156,7 @@ func (s *state) UpdateTime() time.Time {
 }
 
 // As implements driver.State.As.
-func (s *state) As(i interface{}) bool {
+func (s *state) As(i any) bool {
 	if s.raw == nil {
 		return false
 	}
@@ -204,6 +218,11 @@ func (w *watcher) WatchVariable(ctx context.Context, prev driver.State) (driver.
 	if err != nil {
 		return errorState(err, prev), w.wait
 	}
+	authUsername := os.Getenv("HTTPVAR_AUTH_USERNAME")
+	authPassword := os.Getenv("HTTPVAR_AUTH_PASSWORD")
+	if authUsername != "" && authPassword != "" {
+		req.SetBasicAuth(authUsername, authPassword)
+	}
 	resp, err := w.client.Do(req)
 	if err != nil {
 		return errorState(err, prev), w.wait
@@ -215,7 +234,7 @@ func (w *watcher) WatchVariable(ctx context.Context, prev driver.State) (driver.
 		return errorState(err, prev), w.wait
 	}
 
-	respBodyBytes, err := ioutil.ReadAll(resp.Body)
+	respBodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errorState(err, prev), w.wait
 	}
@@ -244,7 +263,7 @@ func (w *watcher) Close() error {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (w *watcher) ErrorAs(err error, i interface{}) bool {
+func (w *watcher) ErrorAs(err error, i any) bool {
 	switch v := err.(type) {
 	case *url.Error:
 		if p, ok := i.(*url.Error); ok {

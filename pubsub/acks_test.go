@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://www.apache.org/licenses/LICENSE-2.0
+//	https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,8 +20,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/xerrors"
 
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/internal/gcerr"
@@ -161,11 +159,12 @@ func TestTooManyAcksForASingleBatchGoIntoMultipleBatches(t *testing.T) {
 	sub := pubsub.NewSubscription(ds, nil, nil)
 	defer sub.Shutdown(ctx)
 
+	errs := make(chan error, n)
 	// Receive and ack the messages concurrently.
 	recv := func() {
 		mr, err := sub.Receive(ctx)
 		if err != nil {
-			t.Fatal(err)
+			errs <- err
 		}
 		mr.Ack()
 	}
@@ -175,8 +174,14 @@ func TestTooManyAcksForASingleBatchGoIntoMultipleBatches(t *testing.T) {
 	}
 	wg.Wait()
 
+	close(errs)
+
 	if len(sentAckBatches) < 2 {
 		t.Errorf("got %d batches, want at least 2", len(sentAckBatches))
+	}
+
+	for err := range errs {
+		t.Fatalf("got error from goroutine: %v", err)
 	}
 }
 
@@ -381,7 +386,7 @@ func TestReceiveReturnsAckErrorOnNoMoreMessages(t *testing.T) {
 	serr := errors.New("unrecoverable error")
 	receiveHappened := make(chan struct{})
 	ackHappened := make(chan struct{})
-	var ds = &callbackDriverSub{
+	ds := &callbackDriverSub{
 		// First call to receiveBatch will return a single message.
 		receiveBatch: func(context.Context) ([]*driver.Message, error) {
 			ms := []*driver.Message{{AckID: 1}}
@@ -435,7 +440,7 @@ func TestReceiveReturnsAckErrorOnNoMoreMessages(t *testing.T) {
 	if got := gcerrors.Code(err); got != gcerrors.Internal {
 		t.Fatalf("error code = %v; want %v", got, gcerrors.Internal)
 	}
-	if got := xerrors.Unwrap(err); got != serr {
+	if got := errors.Unwrap(err); got != serr {
 		t.Errorf("error = %v; want %v", got, serr)
 	}
 }

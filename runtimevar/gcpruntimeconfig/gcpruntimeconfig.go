@@ -17,7 +17,7 @@
 // (https://cloud.google.com/deployment-manager/runtime-configurator).
 // Use OpenVariable to construct a *runtimevar.Variable.
 //
-// URLs
+// # URLs
 //
 // For runtimevar.OpenVariable, gcpruntimeconfig registers for the scheme
 // "gcpruntimeconfig".
@@ -28,11 +28,11 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // gcpruntimeconfig exposes the following types for As:
-//  - Snapshot: *pb.Variable
-//  - Error: *status.Status
+//   - Snapshot: *pb.Variable
+//   - Error: *status.Status
 package gcpruntimeconfig // import "gocloud.dev/runtimevar/gcpruntimeconfig"
 
 import (
@@ -45,7 +45,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/google/wire"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/gcp"
@@ -134,8 +133,10 @@ const Scheme = "gcpruntimeconfig"
 // The following query parameters are supported:
 //
 //   - decoder: The decoder to use. Defaults to URLOpener.Decoder, or
-//       runtimevar.BytesDecoder if URLOpener.Decoder is nil.
-//       See runtimevar.DecoderByName for supported values.
+//     runtimevar.BytesDecoder if URLOpener.Decoder is nil.
+//     See runtimevar.DecoderByName for supported values.
+//   - wait: The poll interval, in time.ParseDuration formats.
+//     Defaults to 30s.
 type URLOpener struct {
 	// Client must be set to a non-nil client authenticated with
 	// Cloud RuntimeConfigurator scope or equivalent.
@@ -159,11 +160,20 @@ func (o *URLOpener) OpenVariableURL(ctx context.Context, u *url.URL) (*runtimeva
 	if err != nil {
 		return nil, fmt.Errorf("open variable %v: invalid decoder: %v", u, err)
 	}
+	opts := o.Options
+	if s := q.Get("wait"); s != "" {
+		q.Del("wait")
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, fmt.Errorf("open variable %v: invalid wait %q: %v", u, s, err)
+		}
+		opts.WaitDuration = d
+	}
 
 	for param := range q {
 		return nil, fmt.Errorf("open variable %v: invalid query parameter %q", u, param)
 	}
-	return OpenVariable(o.Client, path.Join(u.Host, u.Path), decoder, &o.Options)
+	return OpenVariable(o.Client, path.Join(u.Host, u.Path), decoder, &opts)
 }
 
 // Options sets options.
@@ -177,7 +187,8 @@ type Options struct {
 // GCP Cloud Runtime Configurator.
 //
 // A variableKey will look like:
-//   projects/[project_id]/configs/[CONFIG_ID]/variables/[VARIABLE_NAME]
+//
+//	projects/[project_id]/configs/[CONFIG_ID]/variables/[VARIABLE_NAME]
 //
 // You can use the full string (e.g., copied from the GCP Console), or
 // construct one from its parts using VariableKey.
@@ -223,7 +234,7 @@ func VariableKey(projectID gcp.ProjectID, configID, variableName string) string 
 
 // state implements driver.State.
 type state struct {
-	val        interface{}
+	val        any
 	raw        *pb.Variable
 	updateTime time.Time
 	rawBytes   []byte
@@ -231,7 +242,7 @@ type state struct {
 }
 
 // Value implements driver.State.Value.
-func (s *state) Value() (interface{}, error) {
+func (s *state) Value() (any, error) {
 	return s.val, s.err
 }
 
@@ -241,7 +252,7 @@ func (s *state) UpdateTime() time.Time {
 }
 
 // As implements driver.State.As.
-func (s *state) As(i interface{}) bool {
+func (s *state) As(i any) bool {
 	if s.raw == nil {
 		return false
 	}
@@ -323,7 +334,7 @@ func (w *watcher) Close() error {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (w *watcher) ErrorAs(err error, i interface{}) bool {
+func (w *watcher) ErrorAs(err error, i any) bool {
 	// FromError converts err to a *status.Status.
 	s, _ := status.FromError(err)
 	if p, ok := i.(**status.Status); ok {
@@ -347,10 +358,5 @@ func bytesFromProto(vpb *pb.Variable) []byte {
 }
 
 func parseUpdateTime(vpb *pb.Variable) (time.Time, error) {
-	updateTime, err := ptypes.Timestamp(vpb.GetUpdateTime())
-	if err != nil {
-		return time.Time{}, fmt.Errorf(
-			"variable message for name=%q contains invalid timestamp: %v", vpb.Name, err)
-	}
-	return updateTime, nil
+	return vpb.GetUpdateTime().AsTime(), nil
 }

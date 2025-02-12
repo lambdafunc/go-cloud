@@ -1,12 +1,14 @@
 {
-  "Initial": "AQAAAA7XW2auDAyZAf4g",
+  "Initial": "AQAAAA7eTdHqNKCztwAA",
   "Version": "0.2",
   "Converter": {
     "ScrubBody": null,
     "ClearHeaders": [
       "^X-Goog-.*Encryption-Key$",
       "^Expires$",
-      "^Signature$"
+      "^Signature$",
+      "^X-Goog-Gcs-Idempotency-Token$",
+      "^User-Agent$"
     ],
     "RemoveRequestHeaders": [
       "^Authorization$",
@@ -35,7 +37,7 @@
   },
   "Entries": [
     {
-      "ID": "0d3a68ea875a0501",
+      "ID": "32ba525cd10870da",
       "Request": {
         "Method": "GET",
         "URL": "https://storage.googleapis.com/go-cloud-blob-test-bucket/blob-for-reading",
@@ -44,7 +46,10 @@
             "gzip"
           ],
           "User-Agent": [
-            "go-cloud/blob/0.1.0"
+            "CLEARED"
+          ],
+          "X-Goog-Gcs-Idempotency-Token": [
+            "CLEARED"
           ]
         },
         "MediaType": "",
@@ -58,9 +63,6 @@
         "ProtoMajor": 1,
         "ProtoMinor": 1,
         "Header": {
-          "Alt-Svc": [
-            "h3-29=\":443\"; ma=2592000,h3-T051=\":443\"; ma=2592000,h3-Q050=\":443\"; ma=2592000,h3-Q046=\":443\"; ma=2592000,h3-Q043=\":443\"; ma=2592000,quic=\":443\"; ma=2592000; v=\"46,43\""
-          ],
           "Cache-Control": [
             "private, max-age=0"
           ],
@@ -71,7 +73,7 @@
             "application/xml; charset=UTF-8"
           ],
           "Date": [
-            "Thu, 03 Dec 2020 23:07:26 GMT"
+            "Tue, 13 Aug 2024 22:15:07 GMT"
           ],
           "Expires": [
             "CLEARED"
@@ -79,17 +81,8 @@
           "Server": [
             "UploadServer"
           ],
-          "X-Guploader-Customer": [
-            "cloud-storage"
-          ],
-          "X-Guploader-Request-Result": [
-            "agent_rejected"
-          ],
-          "X-Guploader-Upload-Result": [
-            "agent_rejected"
-          ],
           "X-Guploader-Uploadid": [
-            "ABg5-UwxKULqBdw4AzbitCZRr1PK3YQHzYcQXTWjF9vv0xxCOQCiyHKyml3qf1cXVa3biWdHi2x1pgALK94sZ6EgrOvH6-w7Jg"
+            "AHxI1nOgGOGumTvYSf-5QLi0PLxHTHjXkuWvM--j4Z76X5MgOhU49TqXRtjLu0zYZ-BY4E7iOpbj8PhrhA"
           ]
         },
         "Body": "PD94bWwgdmVyc2lvbj0nMS4wJyBlbmNvZGluZz0nVVRGLTgnPz48RXJyb3I+PENvZGU+Tm9TdWNoS2V5PC9Db2RlPjxNZXNzYWdlPlRoZSBzcGVjaWZpZWQga2V5IGRvZXMgbm90IGV4aXN0LjwvTWVzc2FnZT48RGV0YWlscz5ObyBzdWNoIG9iamVjdDogZ28tY2xvdWQtYmxvYi10ZXN0LWJ1Y2tldC9ibG9iLWZvci1yZWFkaW5nPC9EZXRhaWxzPjwvRXJyb3I+"

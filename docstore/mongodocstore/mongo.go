@@ -16,8 +16,7 @@
 // and MongoDB-compatible services hosted on-premise or by cloud providers,
 // including Amazon DocumentDB and Azure Cosmos DB.
 //
-//
-// URLs
+// # URLs
 //
 // For docstore.OpenCollection, mongodocstore registers for the scheme "mongo".
 // The default URL opener will dial a Mongo server using the environment
@@ -26,26 +25,24 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-//
-// Action Lists
+// # Action Lists
 //
 // mongodocstore uses the unordered BulkWrite call of the underlying driver for writes, and uses Find with a list of document IDs for Get.
 // (These implementation choices are subject to change.)
 // It calls the BeforeDo function once before each call to the underlying driver. The as function passed
 // to the BeforeDo function exposes the following types:
-//  - Gets: *options.FindOptions
-//  - writes: []mongo.WriteModel and *options.BulkWriteOptions
+//   - Gets: *options.FindOptions
+//   - writes: []mongo.WriteModel and *options.BulkWriteOptions
 //
-// As
+// # As
 //
 // mongodocstore exposes the following types for As:
-//  - Collection: *mongo.Collection
-//  - Query.BeforeQuery: *options.FindOptions or bson.D (the filter for Delete and Update queries)
-//  - DocumentIterator: *mongo.Cursor
-//  - Error: mongo.CommandError, mongo.BulkWriteError, mongo.BulkWriteException
+//   - Collection: *mongo.Collection
+//   - Query.BeforeQuery: *options.FindOptions or bson.D (the filter for Delete and Update queries)
+//   - DocumentIterator: *mongo.Cursor
+//   - Error: mongo.CommandError, mongo.BulkWriteError, mongo.BulkWriteException
 //
-//
-// Special Considerations
+// # Special Considerations
 //
 // MongoDB represents times to millisecond precision, while Go's time.Time type has
 // nanosecond precision. To save time.Times to MongoDB without loss of precision,
@@ -109,6 +106,7 @@ type collection struct {
 	opts          *Options
 }
 
+// Options holds various options.
 type Options struct {
 	// Lowercase all field names for document encoding, field selection, update
 	// modifications and queries.
@@ -206,7 +204,7 @@ const mongoIDField = "_id"
 
 func (c *collection) RunActions(ctx context.Context, actions []*driver.Action, opts *driver.RunActionsOptions) driver.ActionListError {
 	errs := make([]error, len(actions))
-	beforeGets, gets, writes, afterGets := driver.GroupActions(actions)
+	beforeGets, gets, writes, _, afterGets := driver.GroupActions(actions)
 	c.runGets(ctx, beforeGets, errs, opts)
 	ch := make(chan []error)
 	go func() { ch <- c.bulkWrite(ctx, writes, errs, opts) }()
@@ -418,7 +416,9 @@ func (c *collection) newUpdateDoc(mods []driver.Mod, writeRevision bool) (map[st
 		rev = driver.UniqueString()
 		sets = append(sets, bson.E{Key: c.revisionField, Value: rev})
 	}
-	updateDoc["$set"] = sets
+	if len(sets) > 0 {
+		updateDoc["$set"] = sets
+	}
 	if len(unsets) > 0 {
 		updateDoc["$unset"] = unsets
 	}

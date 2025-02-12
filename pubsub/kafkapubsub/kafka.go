@@ -23,7 +23,7 @@
 // kafkapubsub does not support Message.Nack; Message.Nackable will return
 // false, and Message.Nack will panic if called.
 //
-// URLs
+// # URLs
 //
 // For pubsub.OpenTopic and pubsub.OpenSubscription, kafkapubsub registers
 // for the scheme "kafka".
@@ -34,22 +34,22 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// Escaping
+// # Escaping
 //
 // Go CDK supports all UTF-8 strings. No escaping is required for Kafka.
 // Message metadata is supported through Kafka Headers, which allow arbitrary
 // []byte for both key and value. These are converted to string for use in
 // Message.Metadata.
 //
-// As
+// # As
 //
 // kafkapubsub exposes the following types for As:
-//  - Topic: sarama.SyncProducer
-//  - Subscription: sarama.ConsumerGroup, sarama.ConsumerGroupSession (may be nil during session renegotiation, and session may go stale at any time)
-//  - Message: *sarama.ConsumerMessage
-//  - Message.BeforeSend: *sarama.ProducerMessage
-//  - Message.AfterSend: None
-//  - Error: sarama.ConsumerError, sarama.ConsumerErrors, sarama.ProducerError, sarama.ProducerErrors, sarama.ConfigurationError, sarama.PacketDecodingError, sarama.PacketEncodingError, sarama.KError
+//   - Topic: sarama.SyncProducer
+//   - Subscription: sarama.ConsumerGroup, sarama.ConsumerGroupSession (may be nil during session renegotiation, and session may go stale at any time)
+//   - Message: *sarama.ConsumerMessage
+//   - Message.BeforeSend: *sarama.ProducerMessage
+//   - Message.AfterSend: None
+//   - Error: sarama.ConsumerError, sarama.ConsumerErrors, sarama.ProducerError, sarama.ProducerErrors, sarama.ConfigurationError, sarama.PacketDecodingError, sarama.PacketEncodingError, sarama.KError
 package kafkapubsub // import "gocloud.dev/pubsub/kafkapubsub"
 
 import (
@@ -64,7 +64,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/batcher"
@@ -73,10 +73,11 @@ import (
 
 var sendBatcherOpts = &batcher.Options{
 	MaxBatchSize: 100,
-	MaxHandlers:  2,
+	MaxHandlers:  100, // max concurrency for sends
 }
 
 var recvBatcherOpts = &batcher.Options{
+	// Concurrency doesn't make sense here.
 	MaxBatchSize: 1,
 	MaxHandlers:  1,
 }
@@ -135,7 +136,9 @@ const Scheme = "kafka"
 // URLOpener opens Kafka URLs like "kafka://mytopic" for topics and
 // "kafka://group?topic=mytopic" for subscriptions.
 //
-// For topics, the URL's host+path is used as the topic name.
+// For topics, the URL's host+path is used as the topic name,
+// and the "key_name" query parameter is used to extract the routing key
+// from metadata.
 //
 // For subscriptions, the URL's host+path is used as the group name,
 // and the "topic" query parameter(s) are used as the set of topics to
@@ -158,9 +161,19 @@ type URLOpener struct {
 
 // OpenTopicURL opens a pubsub.Topic based on u.
 func (o *URLOpener) OpenTopicURL(ctx context.Context, u *url.URL) (*pubsub.Topic, error) {
-	for param := range u.Query() {
-		return nil, fmt.Errorf("open topic %v: invalid query parameter %q", u, param)
+	for param, value := range u.Query() {
+		switch param {
+		case "key_name":
+			if len(value) != 1 || len(value[0]) == 0 {
+				return nil, fmt.Errorf("open topic %v: invalid query parameter %q", u, param)
+			}
+
+			o.TopicOptions.KeyName = value[0]
+		default:
+			return nil, fmt.Errorf("open topic %v: invalid query parameter %q", u, param)
+		}
 	}
+
 	topicName := path.Join(u.Host, u.Path)
 	return OpenTopic(o.Brokers, o.Config, topicName, &o.TopicOptions)
 }
@@ -216,13 +229,16 @@ type TopicOptions struct {
 	// the value for that key will be used as the message key when sending to
 	// Kafka, instead of being added to the message headers.
 	KeyName string
+
+	// BatcherOptions adds constraints to the default batching done for sends.
+	BatcherOptions batcher.Options
 }
 
 // OpenTopic creates a pubsub.Topic that sends to a Kafka topic.
 //
 // It uses a sarama.SyncProducer to send messages. Producer options can
 // be configured in the Producer section of the sarama.Config:
-// https://godoc.org/github.com/Shopify/sarama#Config.
+// https://godoc.org/github.com/IBM/sarama#Config.
 //
 // Config.Producer.Return.Success must be set to true.
 func OpenTopic(brokers []string, config *sarama.Config, topicName string, opts *TopicOptions) (*pubsub.Topic, error) {
@@ -230,12 +246,13 @@ func OpenTopic(brokers []string, config *sarama.Config, topicName string, opts *
 	if err != nil {
 		return nil, err
 	}
-	return pubsub.NewTopic(dt, sendBatcherOpts), nil
+	bo := sendBatcherOpts.NewMergedOptions(&dt.opts.BatcherOptions)
+	return pubsub.NewTopic(dt, bo), nil
 }
 
 // openTopic returns the driver for OpenTopic. This function exists so the test
 // harness can get the driver interface implementation if it needs to.
-func openTopic(brokers []string, config *sarama.Config, topicName string, opts *TopicOptions) (driver.Topic, error) {
+func openTopic(brokers []string, config *sarama.Config, topicName string, opts *TopicOptions) (*topic, error) {
 	if opts == nil {
 		opts = &TopicOptions{}
 	}
@@ -269,7 +286,7 @@ func (t *topic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 			Headers: headers,
 		}
 		if dm.BeforeSend != nil {
-			asFunc := func(i interface{}) bool {
+			asFunc := func(i any) bool {
 				if p, ok := i.(**sarama.ProducerMessage); ok {
 					*p = pm
 					return true
@@ -289,7 +306,7 @@ func (t *topic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 	}
 	for _, dm := range dms {
 		if dm.AfterSend != nil {
-			asFunc := func(i interface{}) bool { return false }
+			asFunc := func(i any) bool { return false }
 			if err := dm.AfterSend(asFunc); err != nil {
 				return err
 			}
@@ -309,7 +326,7 @@ func (t *topic) IsRetryable(error) bool {
 }
 
 // As implements driver.Topic.As.
-func (t *topic) As(i interface{}) bool {
+func (t *topic) As(i any) bool {
 	if p, ok := i.(*sarama.SyncProducer); ok {
 		*p = t.producer
 		return true
@@ -318,7 +335,7 @@ func (t *topic) As(i interface{}) bool {
 }
 
 // ErrorAs implements driver.Topic.ErrorAs.
-func (t *topic) ErrorAs(err error, i interface{}) bool {
+func (t *topic) ErrorAs(err error, i any) bool {
 	return errorAs(err, i)
 }
 
@@ -383,7 +400,7 @@ type SubscriptionOptions struct {
 //
 // It uses a sarama.ConsumerGroup to receive messages. Consumer options can
 // be configured in the Consumer section of the sarama.Config:
-// https://godoc.org/github.com/Shopify/sarama#Config.
+// https://godoc.org/github.com/IBM/sarama#Config.
 func OpenSubscription(brokers []string, config *sarama.Config, group string, topics []string, opts *SubscriptionOptions) (*pubsub.Subscription, error) {
 	ds, err := openSubscription(brokers, config, group, topics, opts)
 	if err != nil {
@@ -419,7 +436,7 @@ func openSubscription(brokers []string, config *sarama.Config, group string, top
 	// We're registering ds as our ConsumerGroupHandler, so sarama will
 	// call [Setup, ConsumeClaim (possibly more than once), Cleanup]
 	// repeatedly as the consumer group is rebalanced.
-	// See https://godoc.org/github.com/Shopify/sarama#ConsumerGroup.
+	// See https://godoc.org/github.com/IBM/sarama#ConsumerGroup.
 	go func() {
 		for {
 			ds.closeErr = consumerGroup.Consume(ctx, topics, ds)
@@ -564,7 +581,7 @@ func (s *subscription) ReceiveBatch(ctx context.Context, maxMessages int) ([]*dr
 			Body:       msg.Value,
 			Metadata:   md,
 			AckID:      ack,
-			AsFunc: func(i interface{}) bool {
+			AsFunc: func(i any) bool {
 				if p, ok := i.(**sarama.ConsumerMessage); ok {
 					*p = msg
 					return true
@@ -629,7 +646,7 @@ func (*subscription) IsRetryable(error) bool {
 }
 
 // As implements driver.Subscription.As.
-func (s *subscription) As(i interface{}) bool {
+func (s *subscription) As(i any) bool {
 	if p, ok := i.(*sarama.ConsumerGroup); ok {
 		*p = s.consumerGroup
 		return true
@@ -644,7 +661,7 @@ func (s *subscription) As(i interface{}) bool {
 }
 
 // ErrorAs implements driver.Subscription.ErrorAs.
-func (s *subscription) ErrorAs(err error, i interface{}) bool {
+func (s *subscription) ErrorAs(err error, i any) bool {
 	return errorAs(err, i)
 }
 
@@ -653,7 +670,7 @@ func (*subscription) ErrorCode(err error) gcerrors.ErrorCode {
 	return errorCode(err)
 }
 
-func errorAs(err error, i interface{}) bool {
+func errorAs(err error, i any) bool {
 	switch terr := err.(type) {
 	case sarama.ConsumerError:
 		if p, ok := i.(*sarama.ConsumerError); ok {

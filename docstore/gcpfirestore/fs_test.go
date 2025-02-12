@@ -20,15 +20,15 @@ import (
 	"testing"
 
 	vkit "cloud.google.com/go/firestore/apiv1"
-	"github.com/golang/protobuf/proto"
-	tspb "github.com/golang/protobuf/ptypes/timestamp"
+	pb "cloud.google.com/go/firestore/apiv1/firestorepb"
 	"gocloud.dev/docstore"
 	"gocloud.dev/docstore/driver"
 	"gocloud.dev/docstore/drivertest"
 	"gocloud.dev/internal/testing/setup"
 	"google.golang.org/api/option"
-	pb "google.golang.org/genproto/googleapis/firestore/v1"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -46,6 +46,8 @@ type harness struct {
 }
 
 func newHarness(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	conn, done := setup.NewGCPgRPCConn(ctx, t, endPoint, "docstore")
 	client, err := vkit.NewClient(ctx, option.WithGRPCConn(conn))
 	if err != nil {
@@ -183,6 +185,7 @@ func TestResourceIDRegexp(t *testing.T) {
 	for _, good := range []string{
 		"projects/abc-_.309/databases/(default)/documents/C",
 		"projects/P/databases/(default)/documents/C/D/E",
+		"projects/P/databases/mydb/documents/E/F/G",
 	} {
 		if !resourceIDRE.MatchString(good) {
 			t.Errorf("%q did not match but should have", good)
@@ -194,7 +197,6 @@ func TestResourceIDRegexp(t *testing.T) {
 		"Projects/P/databases/(default)/documents/C",
 		"P/databases/(default)/documents/C",
 		"projects/P/Q/databases/(default)/documents/C",
-		"projects/P/databases/mydb/documents/C",
 		"projects/P/databases/(default)/C",
 		"projects/P/databases/(default)/documents/",
 		"projects/P/databases/(default)",

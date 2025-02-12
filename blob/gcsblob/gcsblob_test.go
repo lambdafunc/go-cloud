@@ -19,7 +19,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -67,6 +67,8 @@ type harness struct {
 }
 
 func newHarness(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	opts := &Options{GoogleAccessID: serviceAccountID}
 	if *setup.Record {
 		if *pathToPrivateKey == "" {
@@ -74,7 +76,7 @@ func newHarness(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
 			*pathToPrivateKey = filepath.Join(usr.HomeDir, "Downloads", "gcs-private-key.pem")
 		}
 		// Use a real private key for signing URLs during -record.
-		pk, err := ioutil.ReadFile(*pathToPrivateKey)
+		pk, err := os.ReadFile(*pathToPrivateKey)
 		if err != nil {
 			t.Fatalf("Couldn't find private key at %v: %v", *pathToPrivateKey, err)
 		}
@@ -154,7 +156,7 @@ func (verifyContentLanguage) ErrorCheck(b *blob.Bucket, err error) error {
 	return nil
 }
 
-func (verifyContentLanguage) BeforeRead(as func(interface{}) bool) error {
+func (verifyContentLanguage) BeforeRead(as func(any) bool) error {
 	var objp **storage.ObjectHandle
 	if !as(&objp) {
 		return errors.New("BeforeRead.As failed to get ObjectHandle")
@@ -166,7 +168,7 @@ func (verifyContentLanguage) BeforeRead(as func(interface{}) bool) error {
 	return nil
 }
 
-func (verifyContentLanguage) BeforeWrite(as func(interface{}) bool) error {
+func (verifyContentLanguage) BeforeWrite(as func(any) bool) error {
 	var objp **storage.ObjectHandle
 	if !as(&objp) {
 		return errors.New("Writer.As failed to get ObjectHandle")
@@ -179,7 +181,7 @@ func (verifyContentLanguage) BeforeWrite(as func(interface{}) bool) error {
 	return nil
 }
 
-func (verifyContentLanguage) BeforeCopy(as func(interface{}) bool) error {
+func (verifyContentLanguage) BeforeCopy(as func(any) bool) error {
 	var coh *CopyObjectHandles
 	if !as(&coh) {
 		return errors.New("BeforeCopy.As failed to get CopyObjectHandles")
@@ -191,7 +193,7 @@ func (verifyContentLanguage) BeforeCopy(as func(interface{}) bool) error {
 	return nil
 }
 
-func (verifyContentLanguage) BeforeList(as func(interface{}) bool) error {
+func (verifyContentLanguage) BeforeList(as func(any) bool) error {
 	var q *storage.Query
 	if !as(&q) {
 		return errors.New("List.As failed")
@@ -200,7 +202,7 @@ func (verifyContentLanguage) BeforeList(as func(interface{}) bool) error {
 	return nil
 }
 
-func (verifyContentLanguage) BeforeSign(as func(interface{}) bool) error {
+func (verifyContentLanguage) BeforeSign(as func(any) bool) error {
 	var opts *storage.SignedURLOptions
 	if !as(&opts) {
 		return errors.New("BeforeSign.As failed")
@@ -344,7 +346,7 @@ func TestBeforeReadNonExistentKey(t *testing.T) {
 
 	// Try reading a nonexistent key.
 	_, err = bucket.NewReader(ctx, "nonexistent-key", &blob.ReaderOptions{
-		BeforeRead: func(asFunc func(interface{}) bool) error {
+		BeforeRead: func(asFunc func(any) bool) error {
 			var objp **storage.ObjectHandle
 			if !asFunc(&objp) {
 				return errors.New("Reader.As failed to get ObjectHandle")
@@ -385,7 +387,7 @@ func TestPreconditions(t *testing.T) {
 
 	// Try writing with a failing precondition.
 	if err := bucket.WriteAll(ctx, key, []byte(content), &blob.WriterOptions{
-		BeforeWrite: func(asFunc func(interface{}) bool) error {
+		BeforeWrite: func(asFunc func(any) bool) error {
 			var objp **storage.ObjectHandle
 			if !asFunc(&objp) {
 				return errors.New("Writer.As failed to get ObjectHandle")
@@ -400,7 +402,7 @@ func TestPreconditions(t *testing.T) {
 
 	// Repeat with a precondition that will pass.
 	if err := bucket.WriteAll(ctx, key, []byte(content), &blob.WriterOptions{
-		BeforeWrite: func(asFunc func(interface{}) bool) error {
+		BeforeWrite: func(asFunc func(any) bool) error {
 			var objp **storage.ObjectHandle
 			if !asFunc(&objp) {
 				return errors.New("Writer.As failed to get ObjectHandle")
@@ -416,7 +418,7 @@ func TestPreconditions(t *testing.T) {
 
 	// Try reading with a failing precondition.
 	_, err = bucket.NewReader(ctx, key, &blob.ReaderOptions{
-		BeforeRead: func(asFunc func(interface{}) bool) error {
+		BeforeRead: func(asFunc func(any) bool) error {
 			var objp **storage.ObjectHandle
 			if !asFunc(&objp) {
 				return errors.New("Reader.As failed to get ObjectHandle")
@@ -442,7 +444,7 @@ func TestPreconditions(t *testing.T) {
 
 	// Repeat with a precondition that will pass.
 	reader, err := bucket.NewReader(ctx, key, &blob.ReaderOptions{
-		BeforeRead: func(asFunc func(interface{}) bool) error {
+		BeforeRead: func(asFunc func(any) bool) error {
 			var objp **storage.ObjectHandle
 			if !asFunc(&objp) {
 				return errors.New("Reader.As failed to get ObjectHandle")
@@ -456,7 +458,7 @@ func TestPreconditions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reader.Close()
-	gotBytes, err := ioutil.ReadAll(reader)
+	gotBytes, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +468,7 @@ func TestPreconditions(t *testing.T) {
 
 	// Try copying with a failing precondition on Dst.
 	err = bucket.Copy(ctx, key2, key, &blob.CopyOptions{
-		BeforeCopy: func(asFunc func(interface{}) bool) error {
+		BeforeCopy: func(asFunc func(any) bool) error {
 			var coh *CopyObjectHandles
 			if !asFunc(&coh) {
 				return errors.New("Copy.As failed to get CopyObjectHandles")
@@ -482,7 +484,7 @@ func TestPreconditions(t *testing.T) {
 
 	// Try copying with a failing precondition on Src.
 	err = bucket.Copy(ctx, key2, key, &blob.CopyOptions{
-		BeforeCopy: func(asFunc func(interface{}) bool) error {
+		BeforeCopy: func(asFunc func(any) bool) error {
 			var coh *CopyObjectHandles
 			if !asFunc(&coh) {
 				return errors.New("Copy.As failed to get CopyObjectHandles")
@@ -498,7 +500,7 @@ func TestPreconditions(t *testing.T) {
 
 	// Repeat with preconditions on Dst and Src that will succeed.
 	err = bucket.Copy(ctx, key2, key, &blob.CopyOptions{
-		BeforeCopy: func(asFunc func(interface{}) bool) error {
+		BeforeCopy: func(asFunc func(any) bool) error {
 			var coh *CopyObjectHandles
 			if !asFunc(&coh) {
 				return errors.New("Reader.As failed to get CopyObjectHandles")
@@ -519,7 +521,7 @@ func TestURLOpenerForParams(t *testing.T) {
 
 	// Create a file for use as a dummy private key file.
 	privateKey := []byte("some content")
-	pkFile, err := ioutil.TempFile("", "my-private-key")
+	pkFile, err := os.CreateTemp("", "my-private-key")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -532,11 +534,12 @@ func TestURLOpenerForParams(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		currOpts Options
-		query    url.Values
-		wantOpts Options
-		wantErr  bool
+		name       string
+		currOpts   Options
+		query      url.Values
+		wantOpts   Options
+		wantClient bool
+		wantErr    bool
 	}{
 		{
 			name: "InvalidParam",
@@ -561,9 +564,34 @@ func TestURLOpenerForParams(t *testing.T) {
 			wantOpts: Options{GoogleAccessID: "bar"},
 		},
 		{
+			name:     "AccessID override to - makes new client",
+			currOpts: Options{GoogleAccessID: "foo"},
+			query: url.Values{
+				"access_id": {"-"},
+			},
+			wantOpts:   Options{}, // cleared
+			wantClient: true,
+		},
+		{
 			name:     "AccessID not overridden",
 			currOpts: Options{GoogleAccessID: "bar"},
 			wantOpts: Options{GoogleAccessID: "bar"},
+		},
+		{
+			name: "Invalid value for anonymous",
+			query: url.Values{
+				"anonymous": {"bad"},
+			},
+			wantErr: true,
+		},
+		{
+			name:     "Anonymous",
+			currOpts: Options{GoogleAccessID: "foo"},
+			query: url.Values{
+				"anonymous": {"true"},
+			},
+			wantOpts:   Options{}, // cleared
+			wantClient: true,
 		},
 		{
 			name: "BadPrivateKeyPath",
@@ -608,7 +636,7 @@ func TestURLOpenerForParams(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			o := &URLOpener{Options: test.currOpts}
-			got, err := o.forParams(ctx, test.query)
+			got, gotClient, err := o.forParams(ctx, test.query)
 			if (err != nil) != test.wantErr {
 				t.Errorf("got err %v want error %v", err, test.wantErr)
 			}
@@ -618,6 +646,9 @@ func TestURLOpenerForParams(t *testing.T) {
 			if diff := cmp.Diff(got, &test.wantOpts); diff != "" {
 				t.Errorf("opener.forParams(...) diff (-want +got):\n%s", diff)
 			}
+			if test.wantClient != (gotClient != nil) {
+				t.Errorf("opener.forParams client return value was unexpected, got %v want %v", gotClient != nil, test.wantClient)
+			}
 		})
 	}
 }
@@ -626,12 +657,12 @@ func TestOpenBucketFromURL(t *testing.T) {
 	cleanup := setup.FakeGCPDefaultCredentials(t)
 	defer cleanup()
 
-	pkFile, err := ioutil.TempFile("", "my-private-key")
+	pkFile, err := os.CreateTemp("", "my-private-key")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(pkFile.Name())
-	if err := ioutil.WriteFile(pkFile.Name(), []byte("key"), 0666); err != nil {
+	if err := os.WriteFile(pkFile.Name(), []byte("key"), 0o666); err != nil {
 		t.Fatal(err)
 	}
 
@@ -672,7 +703,8 @@ func TestReadDefaultCredentials(t *testing.T) {
 		WantPrivateKey []byte
 	}{
 		// Variant A: service account file
-		{`{
+		{
+			`{
 			"type": "service_account",
 			"project_id": "project-id",
 			"private_key_id": "key-id",
@@ -688,7 +720,8 @@ func TestReadDefaultCredentials(t *testing.T) {
 			[]byte("-----BEGIN PRIVATE KEY-----\nprivate-key\n-----END PRIVATE KEY-----\n"),
 		},
 		// Variant A: credentials file absent a private key (stripped)
-		{`{
+		{
+			`{
 			"google": {},
 			"client_email": "service-account-email",
 			"client_id": "client-id"
@@ -697,7 +730,8 @@ func TestReadDefaultCredentials(t *testing.T) {
 			[]byte(""),
 		},
 		// Variant B: obtained through the REST API
-		{`{
+		{
+			`{
 			"name": "projects/project-id/serviceAccounts/service-account-email/keys/key-id",
 			"privateKeyType": "TYPE_GOOGLE_CREDENTIALS_FILE",
 			"privateKeyData": "private-key",

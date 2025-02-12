@@ -191,7 +191,7 @@ create an [AWS session][] with the same region as your topic:
 
 ### Azure Service Bus {#azure}
 
-The Go CDK can publish to an [Azure Service Bus][] topic over [AMQP 1.0][].
+The Go CDK can publish to an [Azure Service Bus][] topic.
 The URL for publishing is the topic name. `pubsub.OpenTopic` will use the
 environment variable `SERVICEBUS_CONNECTION_STRING` to obtain the Service Bus
 connection string. The connection string can be obtained
@@ -199,7 +199,6 @@ connection string. The connection string can be obtained
 
 {{< goexample "gocloud.dev/pubsub/azuresb.Example_openTopicFromURL" >}}
 
-[AMQP 1.0]: https://www.amqp.org/
 [Azure connection string]: https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-how-to-use-topics-subscriptions#get-the-connection-string
 [Azure Service Bus]: https://azure.microsoft.com/en-us/services/service-bus/
 
@@ -213,7 +212,7 @@ then pass it to `azuresb.OpenTopic`. There are also helper functions in the
 {{< goexample "gocloud.dev/pubsub/azuresb.ExampleOpenTopic" >}}
 
 [`azuresb.OpenTopic`]: https://godoc.org/gocloud.dev/pubsub/azuresb#OpenTopic
-[Azure Service Bus library]: https://github.com/Azure/azure-service-bus-go
+[Azure Service Bus library]: https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus
 
 ### RabbitMQ {#rabbitmq}
 
@@ -234,7 +233,7 @@ must first create an [`*amqp.Connection`][] to your RabbitMQ instance.
 
 {{< goexample "gocloud.dev/pubsub/rabbitpubsub.ExampleOpenTopic" >}}
 
-[`*amqp.Connection`]: https://godoc.org/github.com/streadway/amqp#Connection
+[`*amqp.Connection`]: https://pkg.go.dev/github.com/rabbitmq/amqp091-go#Connection
 [`rabbitpubsub.OpenTopic`]: https://godoc.org/gocloud.dev/pubsub/rabbitpubsub#OpenTopic
 
 ### NATS {#nats}
@@ -285,7 +284,7 @@ you started.
 
 {{< goexample "gocloud.dev/pubsub/kafkapubsub.ExampleOpenTopic" >}}
 
-[`*sarama.Config`]: https://godoc.org/github.com/Shopify/sarama#Config
+[`*sarama.Config`]: https://godoc.org/github.com/IBM/sarama#Config
 [`kafkapubsub.OpenTopic`]: https://godoc.org/gocloud.dev/pubsub/kafkapubsub#OpenTopic
 [`kafkapubsub.MinimalConfig`]: https://godoc.org/gocloud.dev/pubsub/kafkapubsub#MinimalConfig
 

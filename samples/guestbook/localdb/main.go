@@ -19,7 +19,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -54,6 +53,7 @@ func runLocalDB(containerName, guestbookDir string) error {
 		dockerArgs = append(dockerArgs, "--name", containerName)
 	}
 	dockerArgs = append(dockerArgs,
+		"--platform", "linux/amd64",
 		"--env", "MYSQL_DATABASE=guestbook",
 		"--env", "MYSQL_ROOT_PASSWORD=password",
 		"--detach",
@@ -95,11 +95,11 @@ func runLocalDB(containerName, guestbookDir string) error {
 	}
 
 	log.Printf("Initializing database schema and users")
-	schema, err := ioutil.ReadFile(filepath.Join(guestbookDir, "schema.sql"))
+	schema, err := os.ReadFile(filepath.Join(guestbookDir, "schema.sql"))
 	if err != nil {
 		return fmt.Errorf("reading schema: %v", err)
 	}
-	roles, err := ioutil.ReadFile(filepath.Join(guestbookDir, "roles.sql"))
+	roles, err := os.ReadFile(filepath.Join(guestbookDir, "roles.sql"))
 	if err != nil {
 		return fmt.Errorf("reading roles: %v", err)
 	}

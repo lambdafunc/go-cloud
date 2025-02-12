@@ -40,6 +40,7 @@ type GlobalMonitoredResource struct {
 	projectID string
 }
 
+// MonitoredResource returned the monitored resource.
 func (g GlobalMonitoredResource) MonitoredResource() (string, map[string]string) {
 	return "global", map[string]string{"project_id": g.projectID}
 }
@@ -76,7 +77,6 @@ func main() {
 
 	ctx := context.Background()
 	credentials, err := gcp.DefaultCredentials(ctx)
-
 	if err != nil {
 		log.Fatal(err)
 	}

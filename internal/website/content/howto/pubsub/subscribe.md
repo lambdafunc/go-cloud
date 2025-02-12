@@ -152,7 +152,7 @@ whether the message bodies are raw or [SNS JSON][].
 
 Messages with a `base64encoded` message attribute will be automatically
 [Base64][] decoded before being returned. See the [SNS publishing guide][]
-or the [SQS publshing guide][] for more details.
+or the [SQS publishing guide][] for more details.
 
 [Base64]: https://en.wikipedia.org/wiki/Base64
 [SNS publishing guide]: {{< ref "./publish.md#sns" >}}
@@ -171,8 +171,8 @@ first create an [AWS session][] with the same region as your topic:
 
 ### Azure Service Bus {#azure}
 
-The Go CDK can recieve messages from an [Azure Service Bus][] subscription
-over [AMQP 1.0][]. The URL for subscribing is the topic name with the
+The Go CDK can recieve messages from an [Azure Service Bus][] subscription.
+The URL for subscribing is the topic name with the
 subscription name in the `subscription` query parameter.
 `pubsub.OpenSubscription` will use the environment variable
 `SERVICEBUS_CONNECTION_STRING` to obtain the Service Bus Connection String
@@ -195,7 +195,7 @@ package to make this easier.
 {{< goexample "gocloud.dev/pubsub/azuresb.ExampleOpenSubscription" >}}
 
 [`azuresb.OpenSubscription`]: https://godoc.org/gocloud.dev/pubsub/azuresb#OpenSubscription
-[Azure Service Bus library]: https://github.com/Azure/azure-service-bus-go
+[Azure Service Bus library]: https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus
 
 ### RabbitMQ {#rabbitmq}
 
@@ -216,7 +216,7 @@ You must first create an [`*amqp.Connection`][] to your RabbitMQ instance.
 
 {{< goexample "gocloud.dev/pubsub/rabbitpubsub.ExampleOpenSubscription" >}}
 
-[`*amqp.Connection`]: https://godoc.org/github.com/streadway/amqp#Connection
+[`*amqp.Connection`]: https://pkg.go.dev/github.com/rabbitmq/amqp091-go#Connection
 [`rabbitpubsub.OpenSubscription`]: https://godoc.org/gocloud.dev/pubsub/rabbitpubsub#OpenSubscription
 
 ### NATS {#nats}
@@ -274,7 +274,7 @@ get you started.
 
 {{< goexample "gocloud.dev/pubsub/kafkapubsub.ExampleOpenSubscription" >}}
 
-[`*sarama.Config`]: https://godoc.org/github.com/Shopify/sarama#Config
+[`*sarama.Config`]: https://godoc.org/github.com/IBM/sarama#Config
 [`kafkapubsub.OpenSubscription`]: https://godoc.org/gocloud.dev/pubsub/kafkapubsub#OpenSubscription
 [`kafkapubsub.MinimalConfig`]: https://godoc.org/gocloud.dev/pubsub/kafkapubsub#MinimalConfig
 

@@ -125,14 +125,14 @@ const (
 
 //go:generate stringer -type=ActionKind
 
-// An Action describes a single operation on a single document.
 type Action struct {
-	Kind       ActionKind  // the kind of action
-	Doc        Document    // the document on which to perform the action
-	Key        interface{} // the document key returned by Collection.Key, to avoid recomputing it
-	FieldPaths [][]string  // field paths to retrieve, for Get only
-	Mods       []Mod       // modifications to make, for Update only
-	Index      int         // the index of the action in the original action list
+	Kind          ActionKind  // the kind of action
+	Doc           Document    // the document on which to perform the action
+	Key           interface{} // the document key returned by Collection.Key, to avoid recomputing it
+	FieldPaths    [][]string  // field paths to retrieve, for Get only
+	Mods          []Mod       // modifications to make, for Update only
+	Index         int         // the index of the action in the original action list
+	InAtomicWrite bool        // if this action is a part of transaction
 }
 
 // A Mod is a modification to a field path in a document.
@@ -192,6 +192,11 @@ type Query struct {
 	// filter, they should be combined with AND.
 	Filters []Filter
 
+	// Offset (also commonly referred to as `Skip`) sets the number of results to skip
+	// before returning results. When Offset <= 0, the driver implementation should
+	// return all possible results.
+	Offset int
+
 	// Limit sets the maximum number of results returned by running the query. When
 	// Limit <= 0, the driver implementation should return all possible results.
 	Limit int
@@ -214,13 +219,12 @@ type Query struct {
 // TODO(#1762): support comparison of other types.
 type Filter struct {
 	FieldPath []string    // the field path to filter
-	Op        string      // the operation, supports =, >, >=, <, <=
+	Op        string      // the operation, supports `=`, `>`, `>=`, `<`, `<=`, `in`, `not-in`
 	Value     interface{} // the value to compare using the operation
 }
 
 // A DocumentIterator iterates through the results (for Get action).
 type DocumentIterator interface {
-
 	// Next tries to get the next item in the query result and decodes into Document
 	// with the driver's codec.
 	// When there are no more results, it should return io.EOF.

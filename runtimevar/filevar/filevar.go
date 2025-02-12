@@ -24,16 +24,17 @@
 // Known Issues:
 //
 // * On macOS, if an empty file is copied into a configuration file,
-//   filevar will not detect the change.
 //
-// URLs
+//	filevar will not detect the change.
+//
+// # URLs
 //
 // For runtimevar.OpenVariable, filevar registers for the scheme "file".
 // To customize the URL opener, or for more details on the URL format,
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // filevar does not support any types for As.
 package filevar // import "gocloud.dev/runtimevar/filevar"
@@ -43,7 +44,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -71,8 +71,10 @@ const Scheme = "file"
 //
 // The following URL parameters are supported:
 //   - decoder: The decoder to use. Defaults to URLOpener.Decoder, or
-//       runtimevar.BytesDecoder if URLOpener.Decoder is nil.
-//       See runtimevar.DecoderByName for supported values.
+//     runtimevar.BytesDecoder if URLOpener.Decoder is nil.
+//     See runtimevar.DecoderByName for supported values.
+//   - wait: The frequency for retries after an error, in time.ParseDuration formats.
+//     Defaults to 30s.
 type URLOpener struct {
 	// Decoder specifies the decoder to use if one is not specified in the URL.
 	// Defaults to runtimevar.BytesDecoder.
@@ -93,6 +95,15 @@ func (o *URLOpener) OpenVariableURL(ctx context.Context, u *url.URL) (*runtimeva
 	if err != nil {
 		return nil, fmt.Errorf("open variable %v: invalid decoder: %v", u, err)
 	}
+	opts := o.Options
+	if s := q.Get("wait"); s != "" {
+		q.Del("wait")
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, fmt.Errorf("open variable %v: invalid wait %q: %v", u, s, err)
+		}
+		opts.WaitDuration = d
+	}
 
 	for param := range q {
 		return nil, fmt.Errorf("open variable %v: invalid query parameter %q", u, param)
@@ -101,7 +112,7 @@ func (o *URLOpener) OpenVariableURL(ctx context.Context, u *url.URL) (*runtimeva
 	if os.PathSeparator != '/' {
 		path = strings.TrimPrefix(path, "/")
 	}
-	return OpenVariable(filepath.FromSlash(path), decoder, &o.Options)
+	return OpenVariable(filepath.FromSlash(path), decoder, &opts)
 }
 
 // Options sets options.
@@ -173,13 +184,13 @@ func (e *errNotExist) Error() string {
 
 // state implements driver.State.
 type state struct {
-	val        interface{}
+	val        any
 	updateTime time.Time
 	raw        []byte
 	err        error
 }
 
-func (s *state) Value() (interface{}, error) {
+func (s *state) Value() (any, error) {
 	return s.val, s.err
 }
 
@@ -187,7 +198,7 @@ func (s *state) UpdateTime() time.Time {
 	return s.updateTime
 }
 
-func (s *state) As(i interface{}) bool {
+func (s *state) As(i any) bool {
 	return false
 }
 
@@ -268,7 +279,7 @@ func (w *watcher) watch(ctx context.Context, notifier *fsnotify.Watcher, file st
 		}
 
 		// Read the file.
-		b, err := ioutil.ReadFile(file)
+		b, err := os.ReadFile(file)
 		if err != nil {
 			// File probably does not exist. Try again later.
 			cur = w.updateState(&state{err: &errNotExist{err}}, cur)
@@ -322,7 +333,7 @@ func (w *watcher) Close() error {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (w *watcher) ErrorAs(err error, i interface{}) bool { return false }
+func (w *watcher) ErrorAs(err error, i any) bool { return false }
 
 // ErrorCode implements driver.ErrorCode.
 func (*watcher) ErrorCode(err error) gcerrors.ErrorCode {

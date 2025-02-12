@@ -21,12 +21,13 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/driver"
@@ -63,7 +64,7 @@ func (o *defaultDialer) defaultConn(ctx context.Context) (*URLOpener, error) {
 	}
 	conn, err := amqp.Dial(serverURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial RABBIT_SERVER_URL %q: %v", serverURL, err)
+		return nil, fmt.Errorf("failed to dial RABBIT_SERVER_URL %q: %w", serverURL, err)
 	}
 	o.conn = conn
 	o.opener = &URLOpener{Connection: conn}
@@ -73,7 +74,7 @@ func (o *defaultDialer) defaultConn(ctx context.Context) (*URLOpener, error) {
 func (o *defaultDialer) OpenTopicURL(ctx context.Context, u *url.URL) (*pubsub.Topic, error) {
 	opener, err := o.defaultConn(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("open topic %v: failed to open default connection: %v", u, err)
+		return nil, fmt.Errorf("open topic %v: failed to open default connection: %w", u, err)
 	}
 	return opener.OpenTopicURL(ctx, u)
 }
@@ -81,7 +82,7 @@ func (o *defaultDialer) OpenTopicURL(ctx context.Context, u *url.URL) (*pubsub.T
 func (o *defaultDialer) OpenSubscriptionURL(ctx context.Context, u *url.URL) (*pubsub.Subscription, error) {
 	opener, err := o.defaultConn(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("open subscription %v: failed to open default connection: %v", u, err)
+		return nil, fmt.Errorf("open subscription %v: failed to open default connection: %w", u, err)
 	}
 	return opener.OpenSubscriptionURL(ctx, u)
 }
@@ -96,7 +97,9 @@ const Scheme = "rabbit"
 //
 // For subscriptions, the URL's host+path is used as the queue name.
 //
-// No query parameters are supported.
+// An optional query string can be used to set the Qos consumer prefetch on subscriptions
+// like "rabbit://myqueue?prefetch_count=1000" to set the consumer prefetch count to 1000
+// see also https://www.rabbitmq.com/docs/consumer-prefetch
 type URLOpener struct {
 	// Connection to use for communication with the server.
 	Connection *amqp.Connection
@@ -109,25 +112,53 @@ type URLOpener struct {
 
 // OpenTopicURL opens a pubsub.Topic based on u.
 func (o *URLOpener) OpenTopicURL(ctx context.Context, u *url.URL) (*pubsub.Topic, error) {
-	for param := range u.Query() {
-		return nil, fmt.Errorf("open topic %v: invalid query parameter %q", u, param)
+	opts := o.TopicOptions
+	for param, value := range u.Query() {
+		switch param {
+		case "key_name":
+			if len(value) != 1 || len(value[0]) == 0 {
+				return nil, fmt.Errorf("open topic %v: invalid query parameter %q", u, param)
+			}
+
+			opts.KeyName = value[0]
+		default:
+			return nil, fmt.Errorf("open topic %v: invalid query parameter %q", u, param)
+		}
 	}
+
 	exchangeName := path.Join(u.Host, u.Path)
-	return OpenTopic(o.Connection, exchangeName, &o.TopicOptions), nil
+	return OpenTopic(o.Connection, exchangeName, &opts), nil
 }
 
 // OpenSubscriptionURL opens a pubsub.Subscription based on u.
 func (o *URLOpener) OpenSubscriptionURL(ctx context.Context, u *url.URL) (*pubsub.Subscription, error) {
-	for param := range u.Query() {
-		return nil, fmt.Errorf("open subscription %v: invalid query parameter %q", u, param)
+	opts := o.SubscriptionOptions
+	for param, value := range u.Query() {
+		switch param {
+		case "prefetch_count":
+			if len(value) != 1 || len(value[0]) == 0 {
+				return nil, fmt.Errorf("open subscription %v: invalid query parameter %q", u, param)
+			}
+
+			prefetchCount, err := strconv.Atoi(value[0])
+			if err != nil {
+				return nil, fmt.Errorf("open subscription %v: invalid query parameter %q: %w", u, param, err)
+			}
+
+			opts.PrefetchCount = &prefetchCount
+		default:
+			return nil, fmt.Errorf("open subscription %v: invalid query parameter %q", u, param)
+		}
 	}
+
 	queueName := path.Join(u.Host, u.Path)
-	return OpenSubscription(o.Connection, queueName, &o.SubscriptionOptions), nil
+	return OpenSubscription(o.Connection, queueName, &opts), nil
 }
 
 type topic struct {
 	exchange string // the AMQP exchange
 	conn     amqpConnection
+	opts     *TopicOptions
 
 	mu     sync.Mutex
 	ch     amqpChannel              // AMQP channel used for all communication.
@@ -138,11 +169,25 @@ type topic struct {
 
 // TopicOptions sets options for constructing a *pubsub.Topic backed by
 // RabbitMQ.
-type TopicOptions struct{}
+type TopicOptions struct {
+	// KeyName optionally sets the Message.Metadata key to use as the optional
+	// RabbitMQ message key. If set, and if a matching Message.Metadata key is found,
+	// the value for that key will be used as the routing key when sending to
+	// RabbitMQ, instead of being added to the message headers.
+	KeyName string
+}
 
 // SubscriptionOptions sets options for constructing a *pubsub.Subscription
 // backed by RabbitMQ.
-type SubscriptionOptions struct{}
+type SubscriptionOptions struct {
+	// KeyName optionally sets the Message.Metadata key in which to store the
+	// RabbitMQ message key. If set, and if the RabbitMQ message key is non-empty,
+	// the key value will be stored in Message.Metadata under KeyName.
+	KeyName string
+
+	// Qos property prefetch count. Optional.
+	PrefetchCount *int
+}
 
 // OpenTopic returns a *pubsub.Topic corresponding to the named exchange.
 // See the package documentation for an example.
@@ -159,13 +204,18 @@ type SubscriptionOptions struct{}
 // The documentation of the amqp package recommends using separate connections for
 // publishing and subscribing.
 func OpenTopic(conn *amqp.Connection, name string, opts *TopicOptions) *pubsub.Topic {
-	return pubsub.NewTopic(newTopic(&connection{conn}, name), nil)
+	return pubsub.NewTopic(newTopic(&connection{conn}, name, opts), nil)
 }
 
-func newTopic(conn amqpConnection, name string) *topic {
+func newTopic(conn amqpConnection, name string, opts *TopicOptions) *topic {
+	if opts == nil {
+		opts = &TopicOptions{}
+	}
+
 	return &topic{
 		conn:     conn,
 		exchange: name,
+		opts:     opts,
 	}
 }
 
@@ -249,9 +299,9 @@ func (t *topic) SendBatch(ctx context.Context, ms []*driver.Message) error {
 
 	var perr error
 	for _, m := range ms {
-		pub := toPublishing(m)
+		routingKey, pub := toRoutingKeyAndAMQPPublishing(m, t.opts)
 		if m.BeforeSend != nil {
-			asFunc := func(i interface{}) bool {
+			asFunc := func(i any) bool {
 				if p, ok := i.(**amqp.Publishing); ok {
 					*p = &pub
 					return true
@@ -262,12 +312,12 @@ func (t *topic) SendBatch(ctx context.Context, ms []*driver.Message) error {
 				return err
 			}
 		}
-		if perr = ch.Publish(t.exchange, pub); perr != nil {
+		if perr = ch.Publish(t.exchange, routingKey, pub); perr != nil {
 			cancel()
 			break
 		}
 		if m.AfterSend != nil {
-			asFunc := func(i interface{}) bool { return false }
+			asFunc := func(i any) bool { return false }
 			if err := m.AfterSend(asFunc); err != nil {
 				return err
 			}
@@ -285,7 +335,8 @@ func (t *topic) SendBatch(ctx context.Context, ms []*driver.Message) error {
 	}
 	// If there is only one error, return it rather than a MultiError. That
 	// will work better with ErrorCode and ErrorAs.
-	if merr, ok := err.(MultiError); ok && len(merr) == 1 {
+	var merr MultiError
+	if errors.As(err, &merr) && len(merr) == 1 {
 		return merr[0]
 	}
 	return err
@@ -388,16 +439,23 @@ func closeErr(closec <-chan *amqp.Error) error {
 	}
 }
 
-// toPublishing converts a driver.Message to an amqp.Publishing.
-func toPublishing(m *driver.Message) amqp.Publishing {
+// toRoutingKeyAndAMQPPublishing converts a driver.Message to a pair routingKey + amqp.Publishing.
+func toRoutingKeyAndAMQPPublishing(m *driver.Message, opts *TopicOptions) (routingKey string, msg amqp.Publishing) {
 	h := amqp.Table{}
 	for k, v := range m.Metadata {
-		h[k] = v
+		if opts.KeyName == k {
+			routingKey = v
+		} else {
+			h[k] = v
+		}
 	}
-	return amqp.Publishing{
+
+	msg = amqp.Publishing{
 		Headers: h,
 		Body:    m.Body,
 	}
+
+	return routingKey, msg
 }
 
 // IsRetryable implements driver.Topic.IsRetryable.
@@ -421,8 +479,8 @@ var errorCodes = map[int]gcerrors.ErrorCode{
 }
 
 func errorCode(err error) gcerrors.ErrorCode {
-	aerr, ok := err.(*amqp.Error)
-	if !ok {
+	var aerr *amqp.Error
+	if !errors.As(err, &aerr) {
 		return gcerrors.Unknown
 	}
 	if ec, ok := errorCodes[aerr.Code]; ok {
@@ -432,16 +490,16 @@ func errorCode(err error) gcerrors.ErrorCode {
 }
 
 func isRetryable(err error) bool {
-	aerr, ok := err.(*amqp.Error)
-	if !ok {
+	var aerr *amqp.Error
+	if !errors.As(err, &aerr) {
 		return false
 	}
 	// amqp.Error has a Recover field which sounds like it should mean "retryable".
 	// But it actually means "can be recovered by retrying later or with different
 	// parameters," which is not what we want. The error codes for which Recover is
 	// true, defined in the isSoftExceptionCode function of
-	// github.com/streadway/amqp/spec091.go, include things like NotFound and
-	// AccessRefused, which require outside action.
+	// https://github.com/rabbitmq/amqp091-go/blob/main/spec091.go, including things
+	// like NotFound and AccessRefused, which require outside action.
 	//
 	// The following are the codes which might be resolved by retry without external
 	// action, according to the AMQP 0.91 spec
@@ -464,7 +522,7 @@ func isRetryable(err error) bool {
 }
 
 // As implements driver.Topic.As.
-func (t *topic) As(i interface{}) bool {
+func (t *topic) As(i any) bool {
 	c, ok := i.(**amqp.Connection)
 	if !ok {
 		return false
@@ -478,23 +536,27 @@ func (t *topic) As(i interface{}) bool {
 }
 
 // ErrorAs implements driver.Topic.ErrorAs
-func (*topic) ErrorAs(err error, i interface{}) bool {
+func (*topic) ErrorAs(err error, i any) bool {
 	return errorAs(err, i)
 }
 
-func errorAs(err error, i interface{}) bool {
-	switch e := err.(type) {
-	case *amqp.Error:
+func errorAs(err error, i any) bool {
+	var aerr *amqp.Error
+	if errors.As(err, &aerr) {
 		if p, ok := i.(**amqp.Error); ok {
-			*p = e
-			return true
-		}
-	case MultiError:
-		if p, ok := i.(*MultiError); ok {
-			*p = e
+			*p = aerr
 			return true
 		}
 	}
+
+	var merr MultiError
+	if errors.As(err, &merr) {
+		if p, ok := i.(*MultiError); ok {
+			*p = merr
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -515,13 +577,15 @@ func (*topic) Close() error { return nil }
 // The documentation of the amqp package recommends using separate connections for
 // publishing and subscribing.
 func OpenSubscription(conn *amqp.Connection, name string, opts *SubscriptionOptions) *pubsub.Subscription {
-	return pubsub.NewSubscription(newSubscription(&connection{conn}, name), nil, nil)
+	return pubsub.NewSubscription(newSubscription(&connection{conn}, name, opts), nil, nil)
 }
 
 type subscription struct {
 	conn     amqpConnection
 	queue    string // the AMQP queue name
 	consumer string // the client-generated name for this particular subscriber
+
+	opts *SubscriptionOptions
 
 	mu     sync.Mutex
 	ch     amqpChannel // AMQP channel used for all communication.
@@ -533,18 +597,22 @@ type subscription struct {
 
 var nextConsumer int64 // atomic
 
-func newSubscription(conn amqpConnection, name string) *subscription {
+func newSubscription(conn amqpConnection, name string, opts *SubscriptionOptions) *subscription {
+	if opts == nil {
+		opts = &SubscriptionOptions{}
+	}
+
 	return &subscription{
 		conn:             conn,
 		queue:            name,
 		consumer:         fmt.Sprintf("c%d", atomic.AddInt64(&nextConsumer, 1)),
+		opts:             opts,
 		receiveBatchHook: func() {},
 	}
 }
 
 // Must be called with s.mu held.
 func (s *subscription) establishChannel(ctx context.Context) error {
-
 	if s.ch != nil { // We already have a channel.
 		select {
 		// If it was closed, open a new one.
@@ -564,6 +632,11 @@ func (s *subscription) establishChannel(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// Apply subscription options to channel.
+		err = applyOptionsToChannel(s.opts, ch)
+		if err != nil {
+			return err
+		}
 		// Subscribe to messages from the queue.
 		s.delc, err = ch.Consume(s.queue, s.consumer)
 		return err
@@ -571,8 +644,22 @@ func (s *subscription) establishChannel(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
 	s.ch = ch
 	s.closec = ch.NotifyClose(make(chan *amqp.Error, 1)) // closec will get at most one element
+
+	return nil
+}
+
+func applyOptionsToChannel(opts *SubscriptionOptions, ch amqpChannel) error {
+	if opts.PrefetchCount == nil {
+		return nil
+	}
+
+	if err := ch.Qos(*opts.PrefetchCount, 0, false); err != nil {
+		return fmt.Errorf("unable to set channel Qos: %w", err)
+	}
+
 	return nil
 }
 
@@ -608,7 +695,8 @@ func (s *subscription) ReceiveBatch(ctx context.Context, maxMessages int) ([]*dr
 				if err := closeErr(s.closec); err != nil {
 					// PreconditionFailed can happen if we send an Ack or Nack for a
 					// message that has already been acked/nacked. Ignore those errors.
-					if aerr, ok := err.(*amqp.Error); ok && aerr.Code == amqp.PreconditionFailed {
+					var aerr *amqp.Error
+					if errors.As(err, &aerr) && aerr.Code == amqp.PreconditionFailed {
 						return nil, nil
 					}
 					return nil, err
@@ -617,7 +705,7 @@ func (s *subscription) ReceiveBatch(ctx context.Context, maxMessages int) ([]*dr
 				// error.
 				return nil, errors.New("rabbitpubsub: delivery channel closed unexpectedly")
 			}
-			ms = append(ms, toMessage(d))
+			ms = append(ms, toDriverMessage(d, s.opts))
 			if len(ms) >= maxMessages {
 				return ms, nil
 			}
@@ -631,13 +719,17 @@ func (s *subscription) ReceiveBatch(ctx context.Context, maxMessages int) ([]*dr
 	}
 }
 
-// toMessage converts an amqp.Delivery (a received message) to a driver.Message.
-func toMessage(d amqp.Delivery) *driver.Message {
-	// Delivery.Headers is a map[string]interface{}, so we have to
+// toDriverMessage converts an amqp.Delivery (a received message) to a driver.Message.
+func toDriverMessage(d amqp.Delivery, opts *SubscriptionOptions) *driver.Message {
+	// Delivery.Headers is a map[string]any, so we have to
 	// convert each value to a string.
 	md := map[string]string{}
 	for k, v := range d.Headers {
 		md[k] = fmt.Sprint(v)
+	}
+	// Add a metadata entry for the message routing key if appropriate.
+	if d.RoutingKey != "" && opts.KeyName != "" {
+		md[opts.KeyName] = d.RoutingKey
 	}
 	loggableID := d.MessageId
 	if loggableID == "" {
@@ -651,7 +743,7 @@ func toMessage(d amqp.Delivery) *driver.Message {
 		Body:       d.Body,
 		AckID:      d.DeliveryTag,
 		Metadata:   md,
-		AsFunc: func(i interface{}) bool {
+		AsFunc: func(i any) bool {
 			p, ok := i.(*amqp.Delivery)
 			if !ok {
 				return false
@@ -716,7 +808,7 @@ func (*subscription) ErrorCode(err error) gcerrors.ErrorCode {
 }
 
 // As implements driver.Subscription.As.
-func (s *subscription) As(i interface{}) bool {
+func (s *subscription) As(i any) bool {
 	c, ok := i.(**amqp.Connection)
 	if !ok {
 		return false
@@ -730,7 +822,7 @@ func (s *subscription) As(i interface{}) bool {
 }
 
 // ErrorAs implements driver.Subscription.ErrorAs
-func (*subscription) ErrorAs(err error, i interface{}) bool {
+func (*subscription) ErrorAs(err error, i any) bool {
 	return errorAs(err, i)
 }
 

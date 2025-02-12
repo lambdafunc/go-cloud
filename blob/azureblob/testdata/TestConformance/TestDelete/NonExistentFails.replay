@@ -1,5 +1,5 @@
 {
-  "Initial": "AQAAAA7Yn1vfJsu2cP5c",
+  "Initial": "AQAAAA7dVMCkEG+1GAAA",
   "Version": "0.2",
   "Converter": {
     "ScrubBody": [
@@ -36,16 +36,20 @@
     "RemoveParams": [
       "^se$",
       "^sig$",
+      "^st$",
       "^X-Ms-Date$"
     ]
   },
   "Entries": [
     {
-      "ID": "3799e030e77a47e9",
+      "ID": "d588121abef3d1b8",
       "Request": {
         "Method": "DELETE",
         "URL": "https://gocloudblobtests.blob.core.windows.net/go-cloud-bucket/does-not-exist",
         "Header": {
+          "Accept": [
+            "application/xml"
+          ],
           "Accept-Encoding": [
             "gzip"
           ],
@@ -54,9 +58,6 @@
           ],
           "X-Ms-Date": [
             "CLEARED"
-          ],
-          "X-Ms-Delete-Snapshots": [
-            "include"
           ],
           "X-Ms-Version": [
             "CLEARED"
@@ -80,7 +81,7 @@
             "application/xml"
           ],
           "Date": [
-            "Fri, 06 Aug 2021 16:35:43 GMT"
+            "Wed, 07 Feb 2024 00:07:00 GMT"
           ],
           "Server": [
             "Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0"
@@ -89,13 +90,13 @@
             "BlobNotFound"
           ],
           "X-Ms-Request-Id": [
-            "b2f35e01-101e-00cd-7ae1-8a319c000000"
+            "fcf22d3f-901e-0002-5259-59a69a000000"
           ],
           "X-Ms-Version": [
             "CLEARED"
           ]
         },
-        "Body": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48RXJyb3I+PENvZGU+QmxvYk5vdEZvdW5kPC9Db2RlPjxNZXNzYWdlPlRoZSBzcGVjaWZpZWQgYmxvYiBkb2VzIG5vdCBleGlzdC4KUmVxdWVzdElkOmIyZjM1ZTAxLTEwMWUtMDBjZC03YWUxLThhMzE5YzAwMDAwMApUaW1lOjIwMjEtMDgtMDZUMTY6MzU6NDMuNjgzNjc1MFo8L01lc3NhZ2U+PC9FcnJvcj4="
+        "Body": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48RXJyb3I+PENvZGU+QmxvYk5vdEZvdW5kPC9Db2RlPjxNZXNzYWdlPlRoZSBzcGVjaWZpZWQgYmxvYiBkb2VzIG5vdCBleGlzdC4KUmVxdWVzdElkOmZjZjIyZDNmLTkwMWUtMDAwMi01MjU5LTU5YTY5YTAwMDAwMApUaW1lOjIwMjQtMDItMDdUMDA6MDc6MDAuMzUxMTg4N1o8L01lc3NhZ2U+PC9FcnJvcj4="
       }
     }
   ]

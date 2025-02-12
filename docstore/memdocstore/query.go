@@ -45,6 +45,16 @@ func (c *collection) RunGetQuery(_ context.Context, q *driver.Query) (driver.Doc
 		sortDocs(resultDocs, q.OrderByField, q.OrderAscending)
 	}
 
+	// Apply offset
+	if q.Offset > 0 {
+		if q.Offset >= len(resultDocs) {
+			resultDocs = []storedDoc{} // If offset is larger than or equal to the length, result should be an empty slice
+		} else {
+			resultDocs = resultDocs[q.Offset:]
+		}
+	}
+
+	// Apply limit
 	if q.Limit > 0 && len(resultDocs) > q.Limit {
 		resultDocs = resultDocs[:q.Limit]
 	}
@@ -86,7 +96,7 @@ func filterMatches(f driver.Filter, doc storedDoc) bool {
 	return applyComparison(f.Op, c)
 }
 
-// op is one of the five permitted docstore operators ("=", "<", etc.)
+// op is one of the permitted docstore operators ("=", "<", etc.)
 // c is the result of strings.Compare or the like.
 // TODO(jba): dedup from gcpfirestore/query?
 func applyComparison(op string, c int) bool {
@@ -101,6 +111,10 @@ func applyComparison(op string, c int) bool {
 		return c >= 0
 	case "<=":
 		return c <= 0
+	case "in":
+		return c == 0
+	case "not-in":
+		return c != 0
 	default:
 		panic("bad op")
 	}
@@ -109,6 +123,21 @@ func applyComparison(op string, c int) bool {
 func compare(x1, x2 interface{}) (int, bool) {
 	v1 := reflect.ValueOf(x1)
 	v2 := reflect.ValueOf(x2)
+	// this is for in/not-in queries.
+	// return 0 if x1 is in slice x2, -1 if not.
+	if v2.Kind() == reflect.Slice {
+		for i := 0; i < v2.Len(); i++ {
+			if c, ok := compare(x1, v2.Index(i).Interface()); ok {
+				if !ok {
+					return 0, false
+				}
+				if c == 0 {
+					return 0, true
+				}
+			}
+		}
+		return -1, true
+	}
 	if v1.Kind() == reflect.String && v2.Kind() == reflect.String {
 		return strings.Compare(v1.String(), v2.String()), true
 	}
@@ -119,6 +148,12 @@ func compare(x1, x2 interface{}) (int, bool) {
 		if t2, ok := x2.(time.Time); ok {
 			return driver.CompareTimes(t1, t2), true
 		}
+	}
+	if v1.Kind() == reflect.Bool && v2.Kind() == reflect.Bool {
+		if v1.Bool() == v2.Bool() {
+			return 0, true
+		}
+		return -1, true
 	}
 	return 0, false
 }
@@ -131,9 +166,8 @@ func sortDocs(docs []storedDoc, field string, asc bool) {
 		}
 		if asc {
 			return c < 0
-		} else {
-			return c > 0
 		}
+		return c > 0
 	})
 }
 

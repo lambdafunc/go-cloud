@@ -17,7 +17,7 @@
 // (https://cloud.google.com/secret-manager).
 // Use OpenVariable to construct a *runtimevar.Variable.
 //
-// URLs
+// # URLs
 //
 // For runtimevar.OpenVariable, gcpsecretmanager registers for the scheme
 // "gcpsecretmanager".
@@ -28,11 +28,11 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // gcpsecretmanager exposes the following types for As:
-//  - Snapshot: *secretmanagerpb.AccessSecretVersionResponse
-//  - Error: *status.Status
+//   - Snapshot: *secretmanagerpb.AccessSecretVersionResponse
+//   - Error: *status.Status
 package gcpsecretmanager // import "gocloud.dev/runtimevar/gcpsecretmanager"
 
 import (
@@ -47,7 +47,7 @@ import (
 	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	"github.com/golang/protobuf/ptypes"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/google/wire"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/gcp"
@@ -55,7 +55,6 @@ import (
 	"gocloud.dev/runtimevar"
 	"gocloud.dev/runtimevar/driver"
 	"google.golang.org/api/option"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -134,8 +133,10 @@ const Scheme = "gcpsecretmanager"
 // The following query parameters are supported:
 //
 //   - decoder: The decoder to use. Defaults to URLOpener.Decoder, or
-//       runtimevar.BytesDecoder if URLOpener.Decoder is nil.
-//       See runtimevar.DecoderByName for supported values.
+//     runtimevar.BytesDecoder if URLOpener.Decoder is nil.
+//     See runtimevar.DecoderByName for supported values.
+//   - wait: The poll interval, in time.ParseDuration formats.
+//     Defaults to 30s.
 type URLOpener struct {
 	// Client must be set to a non-nil client authenticated with
 	// Secret Manager scope or equivalent.
@@ -159,11 +160,20 @@ func (o *URLOpener) OpenVariableURL(ctx context.Context, u *url.URL) (*runtimeva
 	if err != nil {
 		return nil, fmt.Errorf("open variable %v: invalid decoder: %v", u, err)
 	}
+	opts := o.Options
+	if s := q.Get("wait"); s != "" {
+		q.Del("wait")
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, fmt.Errorf("open variable %v: invalid wait %q: %v", u, s, err)
+		}
+		opts.WaitDuration = d
+	}
 
 	for param := range q {
 		return nil, fmt.Errorf("open variable %v: invalid query parameter %q", u, param)
 	}
-	return OpenVariable(o.Client, path.Join(u.Host, u.Path), decoder, &o.Options)
+	return OpenVariable(o.Client, path.Join(u.Host, u.Path), decoder, &opts)
 }
 
 // Options sets options.
@@ -176,7 +186,8 @@ type Options struct {
 // OpenVariable constructs a *runtimevar.Variable backed by secretKey in GCP Secret Manager.
 //
 // A secretKey will look like:
-//   projects/[project_id]/secrets/[secret_id]
+//
+//	projects/[project_id]/secrets/[secret_id]
 //
 // A project ID is a unique, user-assigned ID of the Project.
 // It must be 6 to 30 lowercase letters, digits, or hyphens.
@@ -205,7 +216,7 @@ func OpenVariable(client *secretmanager.Client, secretKey string, decoder *runti
 	return runtimevar.New(w), nil
 }
 
-var secretKeyRE = regexp.MustCompile("^projects/[a-z][a-z0-9_\\-]{4,28}[a-z0-9_]/secrets/[a-zA-Z0-9_\\-]{1,255}$")
+var secretKeyRE = regexp.MustCompile(`^projects/[a-z][a-z0-9_\-]{4,28}[a-z0-9_]/secrets/[a-zA-Z0-9_\-]{1,255}$`)
 
 const latestVersion = "/versions/latest"
 
@@ -234,7 +245,7 @@ func SecretKey(projectID gcp.ProjectID, secretID string) string {
 
 // state implements driver.State.
 type state struct {
-	val        interface{}
+	val        any
 	raw        *secretmanagerpb.AccessSecretVersionResponse
 	updateTime time.Time
 	rawBytes   []byte
@@ -242,7 +253,7 @@ type state struct {
 }
 
 // Value implements driver.State.Value.
-func (s *state) Value() (interface{}, error) {
+func (s *state) Value() (any, error) {
 	return s.val, s.err
 }
 
@@ -252,7 +263,7 @@ func (s *state) UpdateTime() time.Time {
 }
 
 // As implements driver.State.As.
-func (s *state) As(i interface{}) bool {
+func (s *state) As(i any) bool {
 	if s.raw == nil {
 		return false
 	}
@@ -319,10 +330,7 @@ func (w *watcher) WatchVariable(ctx context.Context, prev driver.State) (driver.
 		return errorState(err, prev), w.wait
 	}
 
-	createTime, err := ptypes.Timestamp(meta.CreateTime)
-	if err != nil {
-		return errorState(fmt.Errorf("invalid timestamp: %v", err), prev), w.wait
-	}
+	createTime := meta.CreateTime.AsTime()
 
 	// See if it's the same raw bytes as before.
 	if prev != nil {
@@ -351,7 +359,7 @@ func (w *watcher) Close() error {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (w *watcher) ErrorAs(err error, i interface{}) bool {
+func (w *watcher) ErrorAs(err error, i any) bool {
 	// FromError converts err to a *status.Status.
 	s, _ := status.FromError(err)
 	if p, ok := i.(**status.Status); ok {

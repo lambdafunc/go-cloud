@@ -17,9 +17,9 @@
 // can use to place and view orders; and a processor, which performs the
 // conversions. This binary can run both together in one process (the default),
 // or it can run either on its own. Either way, the two components:
-//  - communicate over a topic using the gocloud.dev/pubsub API;
-//  - write orders to a database using the gocloud.dev/docstore API;
-//  - and save image files to cloud storage using the gocloud.dev/blob API.
+//   - communicate over a topic using the gocloud.dev/pubsub API;
+//   - write orders to a database using the gocloud.dev/docstore API;
+//   - and save image files to cloud storage using the gocloud.dev/blob API.
 //
 // This application assumes at-least-once processing. Make sure the pubsub
 // implementation you provide to it has that behavior.
@@ -28,7 +28,6 @@ package main
 import (
 	"context"
 	"flag"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -98,7 +97,6 @@ type config struct {
 
 // setup opens all the necessary resources for the application.
 func setup(conf config) (_ *frontend, _ *processor, cleanup func(), err error) {
-
 	addCleanup := func(f func()) {
 		old := cleanup
 		cleanup = func() { old(); f() }
@@ -128,7 +126,7 @@ func setup(conf config) (_ *frontend, _ *processor, cleanup func(), err error) {
 
 	burl := conf.bucketURL
 	if burl == "" {
-		dir, err := ioutil.TempDir("", "gocdk-order")
+		dir, err := os.MkdirTemp("", "gocdk-order")
 		if err != nil {
 			return nil, nil, cleanup, err
 		}

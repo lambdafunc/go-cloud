@@ -1,5 +1,5 @@
 {
-  "Initial": "AQAAAA7Yn1vfESaVuf5c",
+  "Initial": "AQAAAA7dVMCjKa5f2wAA",
   "Version": "0.2",
   "Converter": {
     "ScrubBody": [
@@ -36,6 +36,7 @@
     "RemoveParams": [
       "^se$",
       "^sig$",
+      "^st$",
       "^X-Ms-Date$"
     ]
   },

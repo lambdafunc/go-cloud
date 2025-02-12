@@ -23,12 +23,12 @@ import (
 	"testing"
 
 	raw "cloud.google.com/go/pubsub/apiv1"
+	"cloud.google.com/go/pubsub/apiv1/pubsubpb"
 	"gocloud.dev/gcp"
 	"gocloud.dev/internal/testing/setup"
 	"gocloud.dev/pubsub"
 	"gocloud.dev/pubsub/driver"
 	"gocloud.dev/pubsub/drivertest"
-	pubsubpb "google.golang.org/genproto/googleapis/pubsub/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -46,6 +46,8 @@ type harness struct {
 }
 
 func newHarness(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	conn, done := setup.NewGCPgRPCConn(ctx, t, endPoint, "pubsub")
 	pubClient, err := PublisherClient(ctx, conn)
 	if err != nil {
@@ -255,10 +257,14 @@ func (gcpAsTest) MessageCheck(m *pubsub.Message) error {
 	if !m.As(&ppm) {
 		return fmt.Errorf("cast failed for %T", &ppm)
 	}
+	var prm *pubsubpb.ReceivedMessage
+	if !m.As(&prm) {
+		return fmt.Errorf("cast failed for %T", &prm)
+	}
 	return nil
 }
 
-func (gcpAsTest) BeforeSend(as func(interface{}) bool) error {
+func (gcpAsTest) BeforeSend(as func(any) bool) error {
 	var ppm *pubsubpb.PubsubMessage
 	if !as(&ppm) {
 		return fmt.Errorf("cast failed for %T", &ppm)
@@ -266,7 +272,7 @@ func (gcpAsTest) BeforeSend(as func(interface{}) bool) error {
 	return nil
 }
 
-func (gcpAsTest) AfterSend(as func(interface{}) bool) error {
+func (gcpAsTest) AfterSend(as func(any) bool) error {
 	var msgId string
 	if !as(&msgId) {
 		return fmt.Errorf("cast failed for %T", &msgId)
@@ -380,6 +386,12 @@ func TestOpenTopicFromURL(t *testing.T) {
 		{"gcppubsub://projects/myproject/topic/mytopic", false},
 		// Invalid parameter.
 		{"gcppubsub://myproject/mytopic?param=value", true},
+		// Valid max_send_batch_size
+		{"gcppubsub://projects/mytopic?max_send_batch_size=1", false},
+		// Invalid max_send_batch_size
+		{"gcppubsub://projects/mytopic?max_send_batch_size=0", true},
+		// Invalid max_send_batch_size
+		{"gcppubsub://projects/mytopic?max_send_batch_size=1001", true},
 	}
 
 	ctx := context.Background()
@@ -408,12 +420,16 @@ func TestOpenSubscriptionFromURL(t *testing.T) {
 		{"gcppubsub://projects/myproject/subscriptions/mysub", false},
 		// Invalid parameter.
 		{"gcppubsub://myproject/mysub?param=value", true},
-		// Valid parameters
+		// Valid max_recv_batch_size
 		{"gcppubsub://projects/myproject/subscriptions/mysub?max_recv_batch_size=1", false},
-		// Invalid parameters
+		// Invalid max_recv_batch_size
 		{"gcppubsub://projects/myproject/subscriptions/mysub?max_recv_batch_size=0", true},
-		// Invalid parameters
+		// Invalid max_recv_batch_size
 		{"gcppubsub://projects/myproject/subscriptions/mysub?max_recv_batch_size=1001", true},
+		// Valid nacklazy
+		{"gcppubsub://projects/myproject/subscriptions/mysub?nacklazy=true", false},
+		// Invalid nacklazy
+		{"gcppubsub://projects/myproject/subscriptions/mysub?nacklazy=foo", true},
 	}
 
 	ctx := context.Background()

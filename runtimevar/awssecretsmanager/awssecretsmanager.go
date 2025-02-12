@@ -16,7 +16,7 @@
 // read from AWS Secrets Manager (https://aws.amazon.com/secrets-manager)
 // Use OpenVariable to construct a *runtimevar.Variable.
 //
-// URLs
+// # URLs
 //
 // For runtimevar.OpenVariable, awssecretsmanager registers for the scheme "awssecretsmanager".
 // The default URL opener will use an AWS session with the default credentials
@@ -26,11 +26,11 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // awssecretsmanager exposes the following types for As:
-//  - Snapshot: (V1) *secretsmanager.GetSecretValueOutput, *secretsmanager.DescribeSecretOutput, (V2) *secretsmanagerv2.GetSecretValueOutput, *secretsmanagerv2.DescribeSecretOutput
-//  - Error: (V1) awserr.Error, (V2) any error type returned by the service, notably smithy.APIError
+//   - Snapshot: (V1) *secretsmanager.GetSecretValueOutput, *secretsmanager.DescribeSecretOutput, (V2) *secretsmanagerv2.GetSecretValueOutput, *secretsmanagerv2.DescribeSecretOutput
+//   - Error: (V1) awserr.Error, (V2) any error type returned by the service, notably smithy.APIError
 package awssecretsmanager // import "gocloud.dev/runtimevar/awssecretsmanager"
 
 import (
@@ -79,8 +79,10 @@ var Set = wire.NewSet(
 //
 // In addition, the following URL parameters are supported:
 //   - decoder: The decoder to use. Defaults to URLOpener.Decoder, or
-//       runtimevar.BytesDecoder if URLOpener.Decoder is nil.
-//       See runtimevar.DecoderByName for supported values.
+//     runtimevar.BytesDecoder if URLOpener.Decoder is nil.
+//     See runtimevar.DecoderByName for supported values.
+//   - wait: The poll interval, in time.ParseDuration formats.
+//     Defaults to 30s.
 type URLOpener struct {
 	// UseV2 indicates whether the AWS SDK V2 should be used.
 	UseV2 bool
@@ -139,13 +141,21 @@ func (o *URLOpener) OpenVariableURL(ctx context.Context, u *url.URL) (*runtimeva
 	if err != nil {
 		return nil, fmt.Errorf("open variable %v: invalid decoder: %v", u, err)
 	}
-
+	opts := o.Options
+	if s := q.Get("wait"); s != "" {
+		q.Del("wait")
+		d, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, fmt.Errorf("open variable %v: invalid wait %q: %v", u, s, err)
+		}
+		opts.WaitDuration = d
+	}
 	if o.UseV2 {
 		cfg, err := gcaws.V2ConfigFromURLParams(ctx, q)
 		if err != nil {
 			return nil, fmt.Errorf("open variable %v: %v", u, err)
 		}
-		return OpenVariableV2(secretsmanagerv2.NewFromConfig(cfg), path.Join(u.Host, u.Path), decoder, &o.Options)
+		return OpenVariableV2(secretsmanagerv2.NewFromConfig(cfg), path.Join(u.Host, u.Path), decoder, &opts)
 	}
 	configProvider := &gcaws.ConfigOverrider{
 		Base: o.ConfigProvider,
@@ -157,7 +167,7 @@ func (o *URLOpener) OpenVariableURL(ctx context.Context, u *url.URL) (*runtimeva
 
 	configProvider.Configs = append(configProvider.Configs, overrideCfg)
 
-	return OpenVariable(configProvider, path.Join(u.Host, u.Path), decoder, &o.Options)
+	return OpenVariable(configProvider, path.Join(u.Host, u.Path), decoder, &opts)
 }
 
 // Options sets options.
@@ -172,6 +182,8 @@ type Options struct {
 // Secrets Manager returns raw bytes; provide a decoder to decode the raw bytes
 // into the appropriate type for runtimevar.Snapshot.Value.
 // See the runtimevar package documentation for examples of decoders.
+//
+// Deprecated: AWS no longer supports their V1 API. Please migrate to OpenVariableV2.
 func OpenVariable(sess client.ConfigProvider, name string, decoder *runtimevar.Decoder, opts *Options) (*runtimevar.Variable, error) {
 	return runtimevar.New(newWatcher(false, sess, nil, name, decoder, opts)), nil
 }
@@ -188,7 +200,7 @@ func OpenVariableV2(client *secretsmanagerv2.Client, name string, decoder *runti
 
 // state implements driver.State.
 type state struct {
-	val        interface{}
+	val        any
 	rawGetV1   *secretsmanager.GetSecretValueOutput
 	rawGetV2   *secretsmanagerv2.GetSecretValueOutput
 	rawDescV1  *secretsmanager.DescribeSecretOutput
@@ -199,7 +211,7 @@ type state struct {
 }
 
 // Value implements driver.State.Value.
-func (s *state) Value() (interface{}, error) {
+func (s *state) Value() (any, error) {
 	return s.val, s.err
 }
 
@@ -209,7 +221,7 @@ func (s *state) UpdateTime() time.Time {
 }
 
 // As implements driver.State.As.
-func (s *state) As(i interface{}) bool {
+func (s *state) As(i any) bool {
 	switch p := i.(type) {
 	case **secretsmanager.GetSecretValueOutput:
 		*p = s.rawGetV1
@@ -414,7 +426,7 @@ func (w *watcher) Close() error {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (w *watcher) ErrorAs(err error, i interface{}) bool {
+func (w *watcher) ErrorAs(err error, i any) bool {
 	if w.useV2 {
 		return errors.As(err, i)
 	}

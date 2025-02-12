@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // fakeConnection implements the amqpConnection interface.
@@ -103,7 +103,7 @@ func (ch *fakeChannel) getExchange(name string) (*exchange, error) {
 // errorf returns an amqp.Error and closes the channel. (In the AMQP protocol, any channel error
 // closes the channel and makes it unusable.)
 // It must be called with ch.conn.mu held.
-func (ch *fakeChannel) errorf(code int, reasonFormat string, args ...interface{}) error {
+func (ch *fakeChannel) errorf(code int, reasonFormat string, args ...any) error {
 	_ = ch.Close()
 	return &amqp.Error{Code: code, Reason: fmt.Sprintf(reasonFormat, args...)}
 }
@@ -152,7 +152,14 @@ func (ch *fakeChannel) QueueDeclareAndBind(queueName, exchangeName string) error
 	return nil
 }
 
-func (ch *fakeChannel) Publish(exchangeName string, pub amqp.Publishing) error {
+func (ch *fakeChannel) Publish(exchangeName, routingKey string, pub amqp.Publishing) error {
+	return ch.PublishWithContext(context.Background(), exchangeName, routingKey, pub)
+}
+
+func (ch *fakeChannel) PublishWithContext(ctx context.Context,
+	exchangeName, routingKey string,
+	pub amqp.Publishing,
+) error {
 	if ch.isClosed() {
 		return amqp.ErrClosed
 	}
@@ -168,9 +175,10 @@ func (ch *fakeChannel) Publish(exchangeName string, pub amqp.Publishing) error {
 		// The message is unroutable. Send a Return to all channels registered with
 		// NotifyReturn.
 		ret := amqp.Return{
-			Exchange:  exchangeName,
-			ReplyCode: amqp.NoRoute,
-			ReplyText: "NO_ROUTE: no queues bound to exchange",
+			Exchange:   exchangeName,
+			ReplyCode:  amqp.NoRoute,
+			ReplyText:  "NO_ROUTE: no queues bound to exchange",
+			RoutingKey: routingKey,
 		}
 		for _, c := range ch.returnChans {
 			select {
@@ -386,6 +394,14 @@ func (ch *fakeChannel) QueueDelete(name string) error {
 	defer ch.conn.mu.Unlock()
 
 	delete(ch.conn.queues, name)
+	return nil
+}
+
+func (ch *fakeChannel) Qos(_, _ int, _ bool) error {
+	if ch.isClosed() {
+		return amqp.ErrClosed
+	}
+
 	return nil
 }
 

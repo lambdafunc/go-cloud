@@ -15,7 +15,7 @@
 // Package gcpkms provides a secrets implementation backed by Google Cloud KMS.
 // Use OpenKeeper to construct a *secrets.Keeper.
 //
-// URLs
+// # URLs
 //
 // For secrets.OpenKeeper, gcpkms registers for the scheme "gcpkms".
 // The default URL opener will create a connection using use default
@@ -25,10 +25,10 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // gcpkms exposes the following type for As:
-//  - Error: *google.golang.org/grpc/status.Status
+//   - Error: *google.golang.org/grpc/status.Status
 package gcpkms // import "gocloud.dev/secrets/gcpkms"
 
 import (
@@ -39,6 +39,7 @@ import (
 	"sync"
 
 	cloudkms "cloud.google.com/go/kms/apiv1"
+	"cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/google/wire"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/gcp"
@@ -46,7 +47,6 @@ import (
 	"gocloud.dev/internal/useragent"
 	"gocloud.dev/secrets"
 	"google.golang.org/api/option"
-	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
 	"google.golang.org/grpc/status"
 )
 
@@ -180,7 +180,7 @@ func (k *keeper) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) 
 func (k *keeper) Close() error { return nil }
 
 // ErrorAs implements driver.Keeper.ErrorAs.
-func (k *keeper) ErrorAs(err error, i interface{}) bool {
+func (k *keeper) ErrorAs(err error, i any) bool {
 	s, ok := status.FromError(err)
 	if !ok {
 		return false

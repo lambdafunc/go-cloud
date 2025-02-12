@@ -16,17 +16,18 @@
 // Bus Topic and Subscription.
 // See https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview for an overview.
 //
-// URLs
+// # URLs
 //
 // For pubsub.OpenTopic and pubsub.OpenSubscription, azuresb registers
 // for the scheme "azuresb".
 // The default URL opener will use a Service Bus Connection String based on
-// the environment variable "SERVICEBUS_CONNECTION_STRING".
+// AZURE_SERVICEBUS_HOSTNAME or SERVICEBUS_CONNECTION_STRING environment variables.
+// SERVICEBUS_CONNECTION_STRING takes precedence.
 // To customize the URL opener, or for more details on the URL format,
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// Message Delivery Semantics
+// # Message Delivery Semantics
 //
 // Azure ServiceBus supports at-least-once semantics in the default Peek-Lock
 // mode; messages will be redelivered if they are not Acked, or if they are
@@ -42,15 +43,15 @@
 // See https://godoc.org/gocloud.dev/pubsub#hdr-At_most_once_and_At_least_once_Delivery
 // for more background.
 //
-// As
+// # As
 //
 // azuresb exposes the following types for As:
-//  - Topic: *servicebus.Topic
-//  - Subscription: *servicebus.Subscription
-//  - Message.BeforeSend: *servicebus.Message
-//  - Message.AfterSend: None
-//  - Message: *servicebus.Message
-//  - Error: common.Retryable, *amqp.Error, *amqp.DetachError
+//   - Topic: *servicebus.Topic
+//   - Subscription: *servicebus.Subscription
+//   - Message.BeforeSend: *servicebus.Message
+//   - Message.AfterSend: None
+//   - Message: *servicebus.Message
+//   - Error: common.Retryable, *amqp.Error, *amqp.LinkError
 package azuresb // import "gocloud.dev/pubsub/azuresb"
 
 import (
@@ -60,13 +61,14 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	common "github.com/Azure/azure-amqp-common-go/v3"
-	"github.com/Azure/azure-amqp-common-go/v3/uuid"
-	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	servicebus "github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"github.com/Azure/go-amqp"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/pubsub"
@@ -75,7 +77,7 @@ import (
 )
 
 const (
-	listenerTimeout = 1 * time.Second
+	defaultListenerTimeout = 2 * time.Second
 )
 
 var sendBatcherOpts = &batcher.Options{
@@ -84,8 +86,13 @@ var sendBatcherOpts = &batcher.Options{
 }
 
 var recvBatcherOpts = &batcher.Options{
-	MaxBatchSize: 1,   // ReceiveBatch only returns one message at a time
+	MaxBatchSize: 50,
 	MaxHandlers:  100, // max concurrency for reads
+}
+
+var ackBatcherOpts = &batcher.Options{
+	MaxBatchSize: 1,
+	MaxHandlers:  100, // max concurrency for acks
 }
 
 func init() {
@@ -95,7 +102,8 @@ func init() {
 }
 
 // defaultURLOpener creates an URLOpener with ConnectionString initialized from
-// the environment variable SERVICEBUS_CONNECTION_STRING.
+// AZURE_SERVICEBUS_HOSTNAME or SERVICEBUS_CONNECTION_STRING environment variables.
+// SERVICEBUS_CONNECTION_STRING takes precedence.
 type defaultOpener struct {
 	init   sync.Once
 	opener *URLOpener
@@ -105,11 +113,12 @@ type defaultOpener struct {
 func (o *defaultOpener) defaultOpener() (*URLOpener, error) {
 	o.init.Do(func() {
 		cs := os.Getenv("SERVICEBUS_CONNECTION_STRING")
-		if cs == "" {
-			o.err = errors.New("SERVICEBUS_CONNECTION_STRING environment variable not set")
+		sbHostname := os.Getenv("AZURE_SERVICEBUS_HOSTNAME")
+		if cs == "" && sbHostname == "" {
+			o.err = errors.New("Neither SERVICEBUS_CONNECTION_STRING nor AZURE_SERVICEBUS_HOSTNAME environment variables are set")
 			return
 		}
-		o.opener = &URLOpener{ConnectionString: cs}
+		o.opener = &URLOpener{ConnectionString: cs, ServiceBusHostname: sbHostname}
 	})
 	return o.opener, o.err
 }
@@ -139,16 +148,24 @@ const Scheme = "azuresb"
 //   - The URL's host+path is used as the topic name.
 //   - For subscriptions, the subscription name must be provided in the
 //     "subscription" query parameter.
+//   - For subscriptions, the ListenerTimeout can be overridden with time.Duration parseable values in "listener_timeout".
 //
 // No other query parameters are supported.
 type URLOpener struct {
-	// ConnectionString is the Service Bus connection string (required).
+	// ConnectionString is the Service Bus connection string (required if ServiceBusHostname is not defined).
 	// https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues
 	ConnectionString string
 
+	// Azure ServiceBus hostname.
+	// https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-go-how-to-use-queues?tabs=bash
+	ServiceBusHostname string
+
+	// ClientOptions are options when creating the Client.
+	ServiceBusClientOptions *servicebus.ClientOptions
+
 	// Options passed when creating the ServiceBus Topic/Subscription.
-	ServiceBusTopicOptions        []servicebus.TopicOption
-	ServiceBusSubscriptionOptions []servicebus.SubscriptionOption
+	ServiceBusSenderOptions   *servicebus.NewSenderOptions
+	ServiceBusReceiverOptions *servicebus.ReceiverOptions
 
 	// TopicOptions specifies the options to pass to OpenTopic.
 	TopicOptions TopicOptions
@@ -156,20 +173,31 @@ type URLOpener struct {
 	SubscriptionOptions SubscriptionOptions
 }
 
-func (o *URLOpener) namespace(kind string, u *url.URL) (*servicebus.Namespace, error) {
-	if o.ConnectionString == "" {
-		return nil, fmt.Errorf("open %s %v: ConnectionString is required", kind, u)
+func (o *URLOpener) sbClient(kind string, u *url.URL) (*servicebus.Client, error) {
+	if o.ConnectionString == "" && o.ServiceBusHostname == "" {
+		return nil, fmt.Errorf("open %s %v: one of ConnectionString or ServiceBusHostname is required", kind, u)
 	}
-	ns, err := NewNamespaceFromConnectionString(o.ConnectionString)
+
+	// Auth using shared key.
+	if o.ConnectionString != "" {
+		client, err := NewClientFromConnectionString(o.ConnectionString, o.ServiceBusClientOptions)
+		if err != nil {
+			return nil, fmt.Errorf("open %s %v: invalid connection string %q: %v", kind, u, o.ConnectionString, err)
+		}
+		return client, nil
+	}
+
+	// Auth using Azure AAD Workload Identity/AAD Pod Identities/AKS Kubelet Identity/Service Principal.
+	client, err := NewClientFromServiceBusHostname(o.ServiceBusHostname, o.ServiceBusClientOptions)
 	if err != nil {
-		return nil, fmt.Errorf("open %s %v: invalid connection string %q: %v", kind, u, o.ConnectionString, err)
+		return nil, fmt.Errorf("open %s %v: invalid service bus hostname %q: %v", kind, u, o.ServiceBusHostname, err)
 	}
-	return ns, nil
+	return client, nil
 }
 
 // OpenTopicURL opens a pubsub.Topic based on u.
 func (o *URLOpener) OpenTopicURL(ctx context.Context, u *url.URL) (*pubsub.Topic, error) {
-	ns, err := o.namespace("topic", u)
+	sbClient, err := o.sbClient("topic", u)
 	if err != nil {
 		return nil, err
 	}
@@ -177,82 +205,114 @@ func (o *URLOpener) OpenTopicURL(ctx context.Context, u *url.URL) (*pubsub.Topic
 		return nil, fmt.Errorf("open topic %v: invalid query parameter %q", u, param)
 	}
 	topicName := path.Join(u.Host, u.Path)
-	t, err := NewTopic(ns, topicName, o.ServiceBusTopicOptions)
+	sbSender, err := NewSender(sbClient, topicName, o.ServiceBusSenderOptions)
 	if err != nil {
 		return nil, fmt.Errorf("open topic %v: couldn't open topic %q: %v", u, topicName, err)
 	}
-	return OpenTopic(ctx, t, &o.TopicOptions)
+	return OpenTopic(ctx, sbSender, &o.TopicOptions)
 }
 
 // OpenSubscriptionURL opens a pubsub.Subscription based on u.
 func (o *URLOpener) OpenSubscriptionURL(ctx context.Context, u *url.URL) (*pubsub.Subscription, error) {
-	ns, err := o.namespace("subscription", u)
+	sbClient, err := o.sbClient("subscription", u)
 	if err != nil {
 		return nil, err
 	}
 	topicName := path.Join(u.Host, u.Path)
-	t, err := NewTopic(ns, topicName, o.ServiceBusTopicOptions)
-	if err != nil {
-		return nil, fmt.Errorf("open subscription %v: couldn't open topic %q: %v", u, topicName, err)
-	}
 	q := u.Query()
-
 	subName := q.Get("subscription")
 	q.Del("subscription")
 	if subName == "" {
 		return nil, fmt.Errorf("open subscription %v: missing required query parameter subscription", u)
 	}
-
+	opts := o.SubscriptionOptions
+	if lts := q.Get("listener_timeout"); lts != "" {
+		q.Del("listener_timeout")
+		d, err := time.ParseDuration(lts)
+		if err != nil {
+			return nil, fmt.Errorf("open subscription %v: invalid listener_timeout %q: %v", u, lts, err)
+		}
+		opts.ListenerTimeout = d
+	}
+	if mrbss := q.Get("max_recv_batch_size"); mrbss != "" {
+		q.Del("max_recv_batch_size")
+		mrbs, err := strconv.Atoi(mrbss)
+		if err != nil {
+			return nil, fmt.Errorf("open subscription %v: invalid max_recv_batch_size %q: %v", u, mrbss, err)
+		}
+		opts.ReceiveBatcherOptions.MaxBatchSize = mrbs
+	}
 	for param := range q {
 		return nil, fmt.Errorf("open subscription %v: invalid query parameter %q", u, param)
 	}
-	sub, err := NewSubscription(t, subName, o.ServiceBusSubscriptionOptions)
+	sbReceiver, err := NewReceiver(sbClient, topicName, subName, o.ServiceBusReceiverOptions)
 	if err != nil {
 		return nil, fmt.Errorf("open subscription %v: couldn't open subscription %q: %v", u, subName, err)
 	}
-	return OpenSubscription(ctx, ns, t, sub, &o.SubscriptionOptions)
+	return OpenSubscription(ctx, sbClient, sbReceiver, &opts)
 }
 
 type topic struct {
-	sbTopic *servicebus.Topic
+	sbSender *servicebus.Sender
 }
 
 // TopicOptions provides configuration options for an Azure SB Topic.
-type TopicOptions struct{}
+type TopicOptions struct {
+	// BatcherOptions adds constraints to the default batching done for sends.
+	BatcherOptions batcher.Options
+}
 
-// NewNamespaceFromConnectionString returns a *servicebus.Namespace from a Service Bus connection string.
+// NewClientFromConnectionString returns a *servicebus.Client from a Service Bus connection string, using shared key for auth.
 // https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues
-func NewNamespaceFromConnectionString(connectionString string) (*servicebus.Namespace, error) {
-	nsOptions := servicebus.NamespaceWithConnectionString(connectionString)
-	return servicebus.NewNamespace(nsOptions)
+func NewClientFromConnectionString(connectionString string, opts *servicebus.ClientOptions) (*servicebus.Client, error) {
+	return servicebus.NewClientFromConnectionString(connectionString, opts)
 }
 
-// NewTopic returns a *servicebus.Topic associated with a Service Bus Namespace.
-func NewTopic(ns *servicebus.Namespace, topicName string, opts []servicebus.TopicOption) (*servicebus.Topic, error) {
-	return ns.NewTopic(topicName, opts...)
-}
-
-// NewSubscription returns a *servicebus.Subscription associated with a Service Bus Topic.
-func NewSubscription(parentTopic *servicebus.Topic, subscriptionName string, opts []servicebus.SubscriptionOption) (*servicebus.Subscription, error) {
-	return parentTopic.NewSubscription(subscriptionName, opts...)
-}
-
-// OpenTopic initializes a pubsub Topic on a given Service Bus Topic.
-func OpenTopic(ctx context.Context, sbTopic *servicebus.Topic, opts *TopicOptions) (*pubsub.Topic, error) {
-	t, err := openTopic(ctx, sbTopic, opts)
+// NewClientFromConnectionString returns a *servicebus.Client from a Service Bus connection string, using shared key for auth.
+// for example you can use workload identity autorization.
+// https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-go-how-to-use-queues?tabs=bash
+func NewClientFromServiceBusHostname(serviceBusHostname string, opts *servicebus.ClientOptions) (*servicebus.Client, error) {
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		return nil, err
 	}
-	return pubsub.NewTopic(t, sendBatcherOpts), nil
+	client, err := servicebus.NewClient(serviceBusHostname, cred, opts)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+// NewSender returns a *servicebus.Sender associated with a Service Bus Client.
+func NewSender(sbClient *servicebus.Client, topicName string, opts *servicebus.NewSenderOptions) (*servicebus.Sender, error) {
+	return sbClient.NewSender(topicName, opts)
+}
+
+// NewReceiver returns a *servicebus.Receiver associated with a Service Bus Topic.
+func NewReceiver(sbClient *servicebus.Client, topicName, subscriptionName string, opts *servicebus.ReceiverOptions) (*servicebus.Receiver, error) {
+	return sbClient.NewReceiverForSubscription(topicName, subscriptionName, opts)
+}
+
+// OpenTopic initializes a pubsub Topic on a given Service Bus Sender.
+func OpenTopic(ctx context.Context, sbSender *servicebus.Sender, opts *TopicOptions) (*pubsub.Topic, error) {
+	t, err := openTopic(ctx, sbSender, opts)
+	if err != nil {
+		return nil, err
+	}
+	if opts == nil {
+		opts = &TopicOptions{}
+	}
+	bo := sendBatcherOpts.NewMergedOptions(&opts.BatcherOptions)
+	return pubsub.NewTopic(t, bo), nil
 }
 
 // openTopic returns the driver for OpenTopic. This function exists so the test
 // harness can get the driver interface implementation if it needs to.
-func openTopic(ctx context.Context, sbTopic *servicebus.Topic, _ *TopicOptions) (driver.Topic, error) {
-	if sbTopic == nil {
-		return nil, errors.New("azuresb: OpenTopic requires a Service Bus Topic")
+func openTopic(ctx context.Context, sbSender *servicebus.Sender, _ *TopicOptions) (driver.Topic, error) {
+	if sbSender == nil {
+		return nil, errors.New("azuresb: OpenTopic requires a Service Bus Sender")
 	}
-	return &topic{sbTopic: sbTopic}, nil
+	return &topic{sbSender: sbSender}, nil
 }
 
 // SendBatch implements driver.Topic.SendBatch.
@@ -261,12 +321,15 @@ func (t *topic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 		panic("azuresb.SendBatch should only get one message at a time")
 	}
 	dm := dms[0]
-	sbms := servicebus.NewMessage(dm.Body)
-	for k, v := range dm.Metadata {
-		sbms.Set(k, v)
+	sbms := &servicebus.Message{Body: dm.Body}
+	if len(dm.Metadata) > 0 {
+		sbms.ApplicationProperties = map[string]any{}
+		for k, v := range dm.Metadata {
+			sbms.ApplicationProperties[k] = v
+		}
 	}
 	if dm.BeforeSend != nil {
-		asFunc := func(i interface{}) bool {
+		asFunc := func(i any) bool {
 			if p, ok := i.(**servicebus.Message); ok {
 				*p = sbms
 				return true
@@ -277,12 +340,12 @@ func (t *topic) SendBatch(ctx context.Context, dms []*driver.Message) error {
 			return err
 		}
 	}
-	err := t.sbTopic.Send(ctx, sbms)
+	err := t.sbSender.SendMessage(ctx, sbms, nil)
 	if err != nil {
 		return err
 	}
 	if dm.AfterSend != nil {
-		asFunc := func(i interface{}) bool { return false }
+		asFunc := func(i any) bool { return false }
 		if err := dm.AfterSend(asFunc); err != nil {
 			return err
 		}
@@ -295,24 +358,24 @@ func (t *topic) IsRetryable(err error) bool {
 	return retryable
 }
 
-func (t *topic) As(i interface{}) bool {
-	p, ok := i.(**servicebus.Topic)
+func (t *topic) As(i any) bool {
+	p, ok := i.(**servicebus.Sender)
 	if !ok {
 		return false
 	}
-	*p = t.sbTopic
+	*p = t.sbSender
 	return true
 }
 
 // ErrorAs implements driver.Topic.ErrorAs
-func (*topic) ErrorAs(err error, i interface{}) bool {
+func (*topic) ErrorAs(err error, i any) bool {
 	return errorAs(err, i)
 }
 
-func errorAs(err error, i interface{}) bool {
+func errorAs(err error, i any) bool {
 	switch v := err.(type) {
-	case *amqp.DetachError:
-		if p, ok := i.(**amqp.DetachError); ok {
+	case *amqp.LinkError:
+		if p, ok := i.(**amqp.LinkError); ok {
 			*p = v
 			return true
 		}
@@ -339,8 +402,8 @@ func (*topic) ErrorCode(err error) gcerrors.ErrorCode {
 func (*topic) Close() error { return nil }
 
 type subscription struct {
-	sbSub *servicebus.Subscription
-	opts  *SubscriptionOptions
+	sbReceiver *servicebus.Receiver
+	opts       *SubscriptionOptions
 }
 
 // SubscriptionOptions will contain configuration for subscriptions.
@@ -350,32 +413,50 @@ type SubscriptionOptions struct {
 	// When true: pubsub.Message.Ack will be a no-op, pubsub.Message.Nackable
 	// will return true, and pubsub.Message.Nack will panic.
 	ReceiveAndDelete bool
+
+	// ReceiveBatcherOptions adds constraints to the default batching done for receives.
+	ReceiveBatcherOptions batcher.Options
+
+	// AckBatcherOptions adds constraints to the default batching done for acks.
+	// Only used when ReceiveAndDelete is false.
+	AckBatcherOptions batcher.Options
+
+	// ListenerTimeout is the amount of time to wait before timing out the
+	// ReceiveMessages RPC call. This is used to ensure the receive operation is
+	// non-blocking as the RPC blocks if there are no messages.
+	// Defaults to 2 seconds.
+	ListenerTimeout time.Duration
 }
 
 // OpenSubscription initializes a pubsub Subscription on a given Service Bus Subscription and its parent Service Bus Topic.
-func OpenSubscription(ctx context.Context, parentNamespace *servicebus.Namespace, parentTopic *servicebus.Topic, sbSubscription *servicebus.Subscription, opts *SubscriptionOptions) (*pubsub.Subscription, error) {
-	ds, err := openSubscription(ctx, parentNamespace, parentTopic, sbSubscription, opts)
+func OpenSubscription(ctx context.Context, sbClient *servicebus.Client, sbReceiver *servicebus.Receiver, opts *SubscriptionOptions) (*pubsub.Subscription, error) {
+	ds, err := openSubscription(ctx, sbClient, sbReceiver, opts)
 	if err != nil {
 		return nil, err
-	}
-	return pubsub.NewSubscription(ds, recvBatcherOpts, nil), nil
-}
-
-// openSubscription returns a driver.Subscription.
-func openSubscription(ctx context.Context, sbNs *servicebus.Namespace, sbTop *servicebus.Topic, sbSub *servicebus.Subscription, opts *SubscriptionOptions) (driver.Subscription, error) {
-	if sbNs == nil {
-		return nil, errors.New("azuresb: OpenSubscription requires a Service Bus Namespace")
-	}
-	if sbTop == nil {
-		return nil, errors.New("azuresb: OpenSubscription requires a Service Bus Topic")
-	}
-	if sbSub == nil {
-		return nil, errors.New("azuresb: OpenSubscription requires a Service Bus Subscription")
 	}
 	if opts == nil {
 		opts = &SubscriptionOptions{}
 	}
-	return &subscription{sbSub: sbSub, opts: opts}, nil
+	rbo := recvBatcherOpts.NewMergedOptions(&opts.ReceiveBatcherOptions)
+	abo := ackBatcherOpts.NewMergedOptions(&opts.AckBatcherOptions)
+	return pubsub.NewSubscription(ds, rbo, abo), nil
+}
+
+// openSubscription returns a driver.Subscription.
+func openSubscription(ctx context.Context, sbClient *servicebus.Client, sbReceiver *servicebus.Receiver, opts *SubscriptionOptions) (driver.Subscription, error) {
+	if sbClient == nil {
+		return nil, errors.New("azuresb: OpenSubscription requires a Service Bus Client")
+	}
+	if sbReceiver == nil {
+		return nil, errors.New("azuresb: OpenSubscription requires a Service Bus Receiver")
+	}
+	if opts == nil {
+		opts = &SubscriptionOptions{}
+	}
+	if opts.ListenerTimeout == 0 {
+		opts.ListenerTimeout = defaultListenerTimeout
+	}
+	return &subscription{sbReceiver: sbReceiver, opts: opts}, nil
 }
 
 // IsRetryable implements driver.Subscription.IsRetryable.
@@ -385,17 +466,17 @@ func (s *subscription) IsRetryable(err error) bool {
 }
 
 // As implements driver.Subscription.As.
-func (s *subscription) As(i interface{}) bool {
-	p, ok := i.(**servicebus.Subscription)
+func (s *subscription) As(i any) bool {
+	p, ok := i.(**servicebus.Receiver)
 	if !ok {
 		return false
 	}
-	*p = s.sbSub
+	*p = s.sbReceiver
 	return true
 }
 
 // ErrorAs implements driver.Subscription.ErrorAs
-func (s *subscription) ErrorAs(err error, i interface{}) bool {
+func (s *subscription) ErrorAs(err error, i any) bool {
 	return errorAs(err, i)
 }
 
@@ -406,33 +487,29 @@ func (s *subscription) ErrorCode(err error) gcerrors.ErrorCode {
 
 // ReceiveBatch implements driver.Subscription.ReceiveBatch.
 func (s *subscription) ReceiveBatch(ctx context.Context, maxMessages int) ([]*driver.Message, error) {
-	// ReceiveOne will block until rctx is Done; we want to return after
+	// ReceiveMessages will block until rctx is Done; we want to return after
 	// a reasonably short delay even if there are no messages. So, create a
 	// sub context for the RPC.
-	rctx, cancel := context.WithTimeout(ctx, listenerTimeout)
+	rctx, cancel := context.WithTimeout(ctx, s.opts.ListenerTimeout)
 	defer cancel()
 
-	// NOTE: there's also a Receive method, but it starts two goroutines
-	// that aren't necessarily finished when Receive returns, which causes
-	// data races if Receive is called again quickly. ReceiveOne is more
-	// straightforward.
 	var messages []*driver.Message
-	err := s.sbSub.ReceiveOne(rctx, servicebus.HandlerFunc(func(_ context.Context, sbmsg *servicebus.Message) error {
+	sbmsgs, err := s.sbReceiver.ReceiveMessages(rctx, maxMessages, nil)
+	for _, sbmsg := range sbmsgs {
 		metadata := map[string]string{}
-		for key, value := range sbmsg.GetKeyValues() {
+		for key, value := range sbmsg.ApplicationProperties {
 			if strVal, ok := value.(string); ok {
 				metadata[key] = strVal
 			}
 		}
 		messages = append(messages, &driver.Message{
-			LoggableID: sbmsg.ID,
-			Body:       sbmsg.Data,
+			LoggableID: sbmsg.MessageID,
+			Body:       sbmsg.Body,
 			Metadata:   metadata,
-			AckID:      sbmsg.LockToken,
+			AckID:      sbmsg,
 			AsFunc:     messageAsFunc(sbmsg),
 		})
-		return nil
-	}))
+	}
 	// Mask rctx timeouts, they are expected if no messages are available.
 	if err == rctx.Err() {
 		err = nil
@@ -440,9 +517,9 @@ func (s *subscription) ReceiveBatch(ctx context.Context, maxMessages int) ([]*dr
 	return messages, err
 }
 
-func messageAsFunc(sbmsg *servicebus.Message) func(interface{}) bool {
-	return func(i interface{}) bool {
-		p, ok := i.(**servicebus.Message)
+func messageAsFunc(sbmsg *servicebus.ReceivedMessage) func(any) bool {
+	return func(i any) bool {
+		p, ok := i.(**servicebus.ReceivedMessage)
 		if !ok {
 			return false
 		}
@@ -457,7 +534,14 @@ func (s *subscription) SendAcks(ctx context.Context, ids []driver.AckID) error {
 		// Ack is a no-op in Receive-and-Delete mode.
 		return nil
 	}
-	return s.updateMessageDispositions(ctx, ids, servicebus.Complete)
+	var err error
+	for _, id := range ids {
+		oneErr := s.sbReceiver.CompleteMessage(ctx, id.(*servicebus.ReceivedMessage), nil)
+		if oneErr != nil {
+			err = oneErr
+		}
+	}
+	return err
 }
 
 // CanNack implements driver.CanNack.
@@ -473,54 +557,14 @@ func (s *subscription) SendNacks(ctx context.Context, ids []driver.AckID) error 
 	if !s.CanNack() {
 		panic("unreachable")
 	}
-	return s.updateMessageDispositions(ctx, ids, servicebus.Abort)
-}
-
-func (s *subscription) updateMessageDispositions(ctx context.Context, ids []driver.AckID, status servicebus.MessageStatus) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	var lockTokenIDs []*uuid.UUID
-	for _, ackID := range ids {
-		if uid, ok := ackID.(*uuid.UUID); ok {
-			lockTokenIDs = append(lockTokenIDs, uid)
+	var err error
+	for _, id := range ids {
+		oneErr := s.sbReceiver.AbandonMessage(ctx, id.(*servicebus.ReceivedMessage), nil)
+		if oneErr != nil {
+			err = oneErr
 		}
 	}
-	err := s.sbSub.SendBatchDisposition(ctx, servicebus.BatchDispositionIterator{
-		LockTokenIDs: lockTokenIDs,
-		Status:       status,
-	})
-	// The error returned from SendBatchDisposition is confusing. It always returns a non-nil
-	// *BatchDispositionError, which holds a list of LockTokenIDs that had errors,
-	// which might be empty (indicating no error).
-	if err == nil {
-		// Unexpected, but clearly no error.
-		return nil
-	}
-	bderr, ok := err.(*servicebus.BatchDispositionError)
-	if !ok {
-		// Unexpected, some other kind of error; just return it.
-		return err
-	}
-	if bderr == nil || len(bderr.Errors) == 0 {
-		// No actual errors.
-		return nil
-	}
-	// Ignore "not found" errors, as they are likely re-acks. Return the
-	// first other error (if any).
-	for _, err := range bderr.Errors {
-		if isNotFoundErr(err) {
-			continue
-		}
-		return err
-	}
-	return nil
-}
-
-// isNotFoundErr returns true if the error is status code 410, Gone.
-// Azure returns this when trying to ack/nack a message that no longer exists.
-func isNotFoundErr(err error) bool {
-	return strings.Contains(err.Error(), "status code 410")
+	return err
 }
 
 // errorCode returns an error code and whether err is retryable.
@@ -531,36 +575,40 @@ func errorCode(err error) (gcerrors.ErrorCode, bool) {
 	if strings.Contains(err.Error(), "status code 404") {
 		return gcerrors.NotFound, false
 	}
-	var cond amqp.ErrorCondition
-	if aerr, ok := err.(*amqp.DetachError); ok {
-		if aerr.RemoteError == nil {
+	if strings.Contains(err.Error(), "status code 401") {
+		return gcerrors.PermissionDenied, false
+	}
+	var cond amqp.ErrCond
+	var aderr *amqp.LinkError
+	var aerr *amqp.Error
+	if errors.As(err, &aderr) {
+		if aderr.RemoteErr == nil {
 			return gcerrors.NotFound, false
 		}
-		cond = aerr.RemoteError.Condition
-	}
-	if aerr, ok := err.(*amqp.Error); ok {
+		cond = aderr.RemoteErr.Condition
+	} else if errors.As(err, &aerr) {
 		cond = aerr.Condition
 	}
 	switch cond {
-	case amqp.ErrorCondition(servicebus.ErrorNotFound):
+	case amqp.ErrCondNotFound:
 		return gcerrors.NotFound, false
 
-	case amqp.ErrorCondition(servicebus.ErrorPreconditionFailed):
+	case amqp.ErrCondPreconditionFailed:
 		return gcerrors.FailedPrecondition, false
 
-	case amqp.ErrorCondition(servicebus.ErrorInternalError):
+	case amqp.ErrCondInternalError:
 		return gcerrors.Internal, true
 
-	case amqp.ErrorCondition(servicebus.ErrorNotImplemented):
+	case amqp.ErrCondNotImplemented:
 		return gcerrors.Unimplemented, false
 
-	case amqp.ErrorCondition(servicebus.ErrorUnauthorizedAccess), amqp.ErrorCondition(servicebus.ErrorNotAllowed):
+	case amqp.ErrCondUnauthorizedAccess, amqp.ErrCondNotAllowed:
 		return gcerrors.PermissionDenied, false
 
-	case amqp.ErrorCondition(servicebus.ErrorResourceLimitExceeded):
+	case amqp.ErrCondResourceLimitExceeded:
 		return gcerrors.ResourceExhausted, true
 
-	case amqp.ErrorCondition(servicebus.ErrorInvalidField):
+	case amqp.ErrCondInvalidField:
 		return gcerrors.InvalidArgument, false
 	}
 	return gcerrors.Unknown, true

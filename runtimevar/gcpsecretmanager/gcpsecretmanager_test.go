@@ -21,13 +21,13 @@ import (
 	"testing"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"gocloud.dev/internal/gcerr"
 	"gocloud.dev/internal/testing/setup"
 	"gocloud.dev/runtimevar"
 	"gocloud.dev/runtimevar/driver"
 	"gocloud.dev/runtimevar/drivertest"
 	"google.golang.org/api/option"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -49,6 +49,8 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	ctx := context.Background()
 	conn, done := setup.NewGCPgRPCConn(ctx, t, "secretmanager.googleapis.com:443", "runtimevar")
 
@@ -224,6 +226,10 @@ func TestOpenVariable(t *testing.T) {
 		{"gcpsecretmanager://projects/myproject/secrets/mysecret?decoder=notadecoder", true},
 		// Invalid param.
 		{"gcpsecretmanager://projects/myproject/secrets/mysecret?param=value", true},
+		// Setting wait.
+		{"gcpsecretmanager://projects/myproject/secrets/mysecret?wait=1m", false},
+		// Invalid wait.
+		{"gcpsecretmanager://projects/myproject/secrets/mysecret?wait=xx", true},
 	}
 
 	ctx := context.Background()

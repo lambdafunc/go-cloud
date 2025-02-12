@@ -236,6 +236,7 @@ func TestLowercaseFields(t *testing.T) {
 	}
 	coll := docstore.NewCollection(dc)
 	defer coll.Close()
+	defer drivertest.ClearCollection(t, coll)
 
 	type S struct {
 		ID, F, G         int
@@ -275,8 +276,10 @@ func TestLowercaseFields(t *testing.T) {
 	// Get with map.
 	got2 := map[string]interface{}{"id": 1}
 	must(coll.Get(ctx, got2))
-	check(got2, map[string]interface{}{"id": int64(1), "f": int64(2), "g": int64(3),
-		"docstorerevision": sdoc.DocstoreRevision})
+	check(got2, map[string]interface{}{
+		"id": int64(1), "f": int64(2), "g": int64(3),
+		"docstorerevision": sdoc.DocstoreRevision,
+	})
 
 	// Field paths in Get.
 	got3 := S{ID: 1}
@@ -287,8 +290,10 @@ func TestLowercaseFields(t *testing.T) {
 	got4 := map[string]interface{}{"id": 1}
 	udoc := &S{ID: 1}
 	must(coll.Actions().Update(udoc, docstore.Mods{"F": 4}).Get(got4).Do(ctx))
-	check(got4, map[string]interface{}{"id": int64(1), "f": int64(4), "g": int64(3),
-		"docstorerevision": udoc.DocstoreRevision})
+	check(got4, map[string]interface{}{
+		"id": int64(1), "f": int64(4), "g": int64(3),
+		"docstorerevision": udoc.DocstoreRevision,
+	})
 
 	// Query filters.
 	var got5 S
@@ -301,4 +306,23 @@ func TestLowercaseFields(t *testing.T) {
 	var got6 S
 	must(coll.Query().OrderBy("G", docstore.Descending).Get(ctx).Next(ctx, &got6))
 	check(got6, *sdoc2)
+
+	// List queries
+	// select F from coll WHERE G IN (50, 51) ORDER BY G DESC
+	// test that F is 99
+	sdoc3 := &S{ID: 3, F: 99, G: 50}
+	sdoc4 := &S{ID: 4, F: 99, G: 51}
+	must(coll.Put(ctx, sdoc3))
+	must(coll.Put(ctx, sdoc4))
+	var got7, got8 S
+	iter := coll.Query().Where("G", "in", []int{50, 51}).OrderBy("G", docstore.Descending).Get(ctx)
+	must(iter.Next(ctx, &got7))
+	must(iter.Next(ctx, &got8))
+	check(got7, *sdoc4)
+	check(got8, *sdoc3)
+
+	// same query with not-in, expect to get sdoc2 back even though G is higher for sdoc3 and sdoc4
+	var got9 S
+	must(coll.Query().Where("G", "not-in", []int{50, 51}).OrderBy("G", docstore.Descending).Get(ctx).Next(ctx, &got9))
+	check(got9, *sdoc2)
 }

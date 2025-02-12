@@ -18,7 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"net/url"
 	"testing"
 
 	kmsv2 "github.com/aws/aws-sdk-go-v2/service/kms"
@@ -26,6 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/aws/smithy-go"
+	"github.com/google/go-cmp/cmp"
 	"gocloud.dev/internal/testing/setup"
 	"gocloud.dev/secrets"
 	"gocloud.dev/secrets/driver"
@@ -54,6 +55,8 @@ func (h *harness) Close() {
 }
 
 func newHarness(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	sess, _, done, _ := setup.NewAWSSession(ctx, t, region)
 	return &harness{
 		useV2:  false,
@@ -63,6 +66,8 @@ func newHarness(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
 }
 
 func newHarnessV2(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	cfg, _, done, _ := setup.NewAWSv2Config(ctx, t, region)
 	return &harness{
 		useV2:    true,
@@ -117,17 +122,10 @@ func TestNoSessionProvidedError(t *testing.T) {
 }
 
 func TestNoConnectionError(t *testing.T) {
-	prevAccessKey := os.Getenv("AWS_ACCESS_KEY")
-	prevSecretKey := os.Getenv("AWS_SECRET_KEY")
-	prevRegion := os.Getenv("AWS_REGION")
-	os.Setenv("AWS_ACCESS_KEY", "myaccesskey")
-	os.Setenv("AWS_SECRET_KEY", "mysecretkey")
-	os.Setenv("AWS_REGION", "us-east-1")
-	defer func() {
-		os.Setenv("AWS_ACCESS_KEY", prevAccessKey)
-		os.Setenv("AWS_SECRET_KEY", prevSecretKey)
-		os.Setenv("AWS_REGION", prevRegion)
-	}()
+	t.Setenv("AWS_ACCESS_KEY", "myaccesskey")
+	t.Setenv("AWS_SECRET_KEY", "mysecretkey")
+	t.Setenv("AWS_REGION", "us-east-1")
+
 	sess, err := session.NewSession()
 	if err != nil {
 		t.Fatal(err)
@@ -142,6 +140,48 @@ func TestNoConnectionError(t *testing.T) {
 
 	if _, err := keeper.Encrypt(context.Background(), []byte("test")); err == nil {
 		t.Error("got nil, want UnrecognizedClientException")
+	}
+}
+
+func TestEncryptionContext(t *testing.T) {
+	tests := []struct {
+		Existing map[string]string
+		URL      string
+		WantErr  bool
+		Want     map[string]string
+	}{
+		// None before or after.
+		{nil, "http://foo", false, nil},
+		// New parameter.
+		{nil, "http://foo?context_foo=bar", false, map[string]string{"foo": "bar"}},
+		// 2 new parameters.
+		{nil, "http://foo?context_foo=bar&context_abc=baz", false, map[string]string{"foo": "bar", "abc": "baz"}},
+		// Multiple values.
+		{nil, "http://foo?context_foo=bar&context_foo=baz", true, nil},
+		// Existing, no new.
+		{map[string]string{"foo": "bar"}, "http://foo", false, map[string]string{"foo": "bar"}},
+		// No-conflict merge.
+		{map[string]string{"foo": "bar"}, "http://foo?context_abc=baz", false, map[string]string{"foo": "bar", "abc": "baz"}},
+		// Overwrite merge.
+		{map[string]string{"foo": "bar"}, "http://foo?context_foo=baz", false, map[string]string{"foo": "baz"}},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("existing %v URL %v", test.Existing, test.URL), func(t *testing.T) {
+			opts := KeeperOptions{
+				EncryptionContext: test.Existing,
+			}
+			u, err := url.Parse(test.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = addEncryptionContextFromURLParams(&opts, u.Query())
+			if (err != nil) != test.WantErr {
+				t.Fatalf("got err %v, want error? %v", err, test.WantErr)
+			}
+			if diff := cmp.Diff(opts.EncryptionContext, test.Want); diff != "" {
+				t.Errorf("diff %v", diff)
+			}
+		})
 	}
 }
 
@@ -162,6 +202,10 @@ func TestOpenKeeper(t *testing.T) {
 		{"awskms://alias/my-key?awssdk=v1", false},
 		// OK, using V2.
 		{"awskms://alias/my-key?awssdk=v2", false},
+		// OK, adding EncryptionContext.
+		{"awskms://alias/my-key?context_abc=foo&context_def=bar", false},
+		// Multiple values for an EncryptionContext.
+		{"awskms://alias/my-key?context_abc=foo&context_abc=bar", true},
 		// Unknown parameter.
 		{"awskms://alias/my-key?param=value", true},
 	}

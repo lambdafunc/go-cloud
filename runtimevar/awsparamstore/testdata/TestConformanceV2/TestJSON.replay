@@ -1,8 +1,10 @@
 {
-  "Initial": "AQAAAA7Yp6hTDq6FTv5c",
+  "Initial": "AQAAAA7eRgWSBHY4TQAA",
   "Version": "0.2",
   "Converter": {
-    "ScrubBody": null,
+    "ScrubBody": [
+      "MessageAttributes.*"
+    ],
     "ClearHeaders": [
       "^X-Goog-.*Encryption-Key$",
       "^Amz-Sdk-Invocation-Id$",
@@ -42,7 +44,7 @@
   },
   "Entries": [
     {
-      "ID": "a1e763319d09c6ac",
+      "ID": "e76123f40678fd41",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -90,20 +92,20 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:03 GMT"
+            "Thu, 08 Aug 2024 00:17:22 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "86f150c5-189a-4e40-9e39-98affaf1d3c1"
+            "b0ecc195-f507-411a-9f9d-1c770350e187"
           ]
         },
         "Body": "H4sIAAAAAAAAAKtWCslMLVKyUgouScxLSSxKUdJRCkstKs7Mz1OyMqwFAFB+6N8fAAAA"
       }
     },
     {
-      "ID": "8ceed209ad0358c8",
+      "ID": "ef064583736c1513",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -151,81 +153,20 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:03 GMT"
+            "Thu, 08 Aug 2024 00:17:22 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "26841b4d-0ea1-4a37-b684-e96e1974716b"
+            "df25164e-beff-4b26-a151-0911339b0673"
           ]
         },
-        "Body": "H4sIAAAAAAAAAG2OsW7CMBCGXyW6pUtCiVNC8IKQytQWVQXBUDMc5AALYiPbtEVR3p0LbRfEctb9v77vXMM7OqwokANZw+hjAhLQGYnfXnpfyZNPCH1IhHzKRVZ0hej1hZDHf+oxELdrazZ6m3yh07g6EMTwjAFn5yOxLtBP4OSVNW+21BtNJbfcpJ1cFEWa5t2sl+XjQQwTll6Ju84/3zQ4bba8z/FwaoNPZWp1ZRXISMG4VBDzO+PDv8mLset9tG9nR0ET3wBTrG6Jxc4++CjsyNGQCWWW7UFyXlvDP2+aC/+C4RI6AQAA"
+        "Body": "H4sIAAAAAAAAAG2OTW/CMAyG/0rlyy4tY4a1kMs0aZxgaBpoHMgOhhqIoAlKwj5U9b/PZeOCdnHk99XzODW8kKeKI3tQNTy+TkEBeavoM6gQKnUKGVOIGap+jr1BF/G+QFTHC3UbWdq1sxuzzT7IG1odGFJ4okjz7yOLLvJXlGQimmdXmo3hUlpp7joF9rpFjn3EQT4apjAV6Zn41/nnm0Vv7Fb2Nzqc2mCpba3PrAaVaBiVGlJ553L4Nxlbt94n+3Z2NDTpFTCj6ppY7NxNSOKOPT8Ioe17e5B9MM7Kz5vmBzzGNmo6AQAA"
       }
     },
     {
-      "ID": "0485f399a39c40a6",
-      "Request": {
-        "Method": "POST",
-        "URL": "https://ssm.us-east-2.amazonaws.com/",
-        "Header": {
-          "Accept-Encoding": [
-            "gzip"
-          ],
-          "Amz-Sdk-Invocation-Id": [
-            "CLEARED"
-          ],
-          "Amz-Sdk-Request": [
-            "attempt=1; max=1"
-          ],
-          "Content-Length": [
-            "62"
-          ],
-          "User-Agent": [
-            "CLEARED"
-          ],
-          "X-Amz-Date": [
-            "CLEARED"
-          ],
-          "X-Amz-Target": [
-            "AmazonSSM.DescribeParameters"
-          ]
-        },
-        "MediaType": "application/x-amz-json-1.1",
-        "BodyParts": [
-          "eyJGaWx0ZXJzIjpbeyJLZXkiOiJOYW1lIiwiVmFsdWVzIjpbInRlc3QtY29uZmlnLXZhcmlhYmxlIl19XX0="
-        ]
-      },
-      "Response": {
-        "StatusCode": 200,
-        "Proto": "HTTP/1.1",
-        "ProtoMajor": 1,
-        "ProtoMinor": 1,
-        "Header": {
-          "Content-Encoding": [
-            "gzip"
-          ],
-          "Content-Length": [
-            "190"
-          ],
-          "Content-Type": [
-            "application/x-amz-json-1.1"
-          ],
-          "Date": [
-            "Thu, 12 Aug 2021 23:40:03 GMT"
-          ],
-          "Server": [
-            "Server"
-          ],
-          "X-Amzn-Requestid": [
-            "41897c19-c850-4e8f-a167-ac5b6711a84f"
-          ]
-        },
-        "Body": "H4sIAAAAAAAAAFWPwQ6CMAyG32VnUBiKuLPe1JCgXgyHygppIsNsEzWEd7cSLx6b72//r4PIwUKLHq0T6jKIDXg4vu8olPD48iIQO3B+32mqCTVTJvEslVkWx2mULJN0u/7PnBxa3gZrFDydImiVWqQyySIplysp1YMDc9uDadB8Cw7cP9U5H1adqakJe7AE1xsyzbsbVYRfuzIQR5qOFx6MBquZ/2QLb8k0PJ/5E+oMW47l+AGzRly53wAAAA=="
-      }
-    },
-    {
-      "ID": "33da57dd76162fca",
+      "ID": "782808457668e837",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -273,13 +214,13 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:03 GMT"
+            "Thu, 08 Aug 2024 00:17:22 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "abdf5392-8969-43ce-9f51-c4d4ca83df8c"
+            "af85d54b-52bd-41b7-a0fe-f0e32bc39695"
           ]
         },
         "Body": "H4sIAAAAAAAAAKuuBQBDv6ajAgAAAA=="

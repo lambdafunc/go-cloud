@@ -16,14 +16,14 @@
 // provided symmetric key.
 // Use NewKeeper to construct a *secrets.Keeper.
 //
-// URLs
+// # URLs
 //
 // For secrets.OpenKeeper, localsecrets registers for the scheme "base64key".
 // To customize the URL opener, or for more details on the URL format,
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // localsecrets does not support any types for As.
 package localsecrets // import "gocloud.dev/secrets/localsecrets"
@@ -56,6 +56,7 @@ const (
 // URLOpener opens localsecrets URLs like "base64key://smGbjm71Nxd1Ig5FS0wj9SlbzAIrnolCz9bQQ6uAhl4=".
 //
 // The URL host must be base64 encoded, and must decode to exactly 32 bytes.
+// Note that base64.URLEncoding should be used to avoid URL-unsafe character in the hostname.
 // If the URL host is empty (e.g., "base64key://"), a new random key is generated.
 //
 // No query parameters are supported.
@@ -168,7 +169,7 @@ func (k *keeper) Decrypt(ctx context.Context, message []byte) ([]byte, error) {
 func (k *keeper) Close() error { return nil }
 
 // ErrorAs implements driver.Keeper.ErrorAs.
-func (k *keeper) ErrorAs(err error, i interface{}) bool {
+func (k *keeper) ErrorAs(err error, i any) bool {
 	return false
 }
 

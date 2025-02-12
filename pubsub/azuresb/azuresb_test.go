@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     https://www.apache.org/licenses/LICENSE-2.0
+//	https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,14 +26,16 @@ import (
 	"gocloud.dev/pubsub/driver"
 	"gocloud.dev/pubsub/drivertest"
 
-	common "github.com/Azure/azure-amqp-common-go/v3"
-	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	servicebus "github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus/admin"
 )
 
 var (
 	// See docs below on how to provision an Azure Service Bus Namespace and obtaining the connection string.
 	// https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues
 	connString = os.Getenv("SERVICEBUS_CONNECTION_STRING")
+	sbHostname = os.Getenv("AZURE_SERVICEBUS_HOSTNAME")
 )
 
 const (
@@ -46,29 +48,41 @@ const (
 )
 
 type harness struct {
-	ns         *servicebus.Namespace
-	numTopics  uint32 // atomic
-	numSubs    uint32 // atomic
-	closer     func()
-	autodelete bool
+	adminClient *admin.Client
+	sbClient    *servicebus.Client
+	numTopics   uint32 // atomic
+	numSubs     uint32 // atomic
+	closer      func()
+	autodelete  bool
+	topics      map[driver.Topic]string
 }
 
 func newHarness(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
-	if connString == "" {
-		return nil, fmt.Errorf("azuresb: test harness requires environment variable SERVICEBUS_CONNECTION_STRING to run")
+	t.Helper()
+
+	if connString == "" && sbHostname == "" {
+		return nil, fmt.Errorf("azuresb: test harness requires environment variable SERVICEBUS_CONNECTION_STRING or AZURE_SERVICEBUS_HOSTNAME to run")
 	}
-	ns, err := NewNamespaceFromConnectionString(connString)
+	adminClient, err := admin.NewClientFromConnectionString(connString, nil)
+	if err != nil {
+		return nil, err
+	}
+	sbClient, err := NewClientFromConnectionString(connString, nil)
 	if err != nil {
 		return nil, err
 	}
 	noop := func() {}
 	return &harness{
-		ns:     ns,
-		closer: noop,
+		adminClient: adminClient,
+		sbClient:    sbClient,
+		closer:      noop,
+		topics:      map[driver.Topic]string{},
 	}, nil
 }
 
 func newHarnessUsingAutodelete(ctx context.Context, t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	h, err := newHarness(ctx, t)
 	if err == nil {
 		h.(*harness).autodelete = true
@@ -78,44 +92,49 @@ func newHarnessUsingAutodelete(ctx context.Context, t *testing.T) (drivertest.Ha
 
 func (h *harness) CreateTopic(ctx context.Context, testName string) (dt driver.Topic, cleanup func(), err error) {
 	topicName := sanitize(fmt.Sprintf("%s-top-%d", testName, atomic.AddUint32(&h.numTopics, 1)))
-	if err := createTopic(ctx, topicName, h.ns, nil); err != nil {
+	if err := createTopic(ctx, topicName, h.adminClient, nil); err != nil {
 		return nil, nil, err
 	}
 
-	sbTopic, err := NewTopic(h.ns, topicName, nil)
-	dt, err = openTopic(ctx, sbTopic, nil)
+	sbSender, err := NewSender(h.sbClient, topicName, nil)
+	dt, err = openTopic(ctx, sbSender, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-
+	h.topics[dt] = topicName
 	cleanup = func() {
-		sbTopic.Close(ctx)
-		deleteTopic(ctx, topicName, h.ns)
+		sbSender.Close(ctx)
+		deleteTopic(ctx, topicName, h.adminClient)
 	}
 	return dt, cleanup, nil
 }
 
 func (h *harness) MakeNonexistentTopic(ctx context.Context) (driver.Topic, error) {
-	sbTopic, err := NewTopic(h.ns, nonexistentTopicName, nil)
+	sbSender, err := NewSender(h.sbClient, nonexistentTopicName, nil)
 	if err != nil {
 		return nil, err
 	}
-	return openTopic(ctx, sbTopic, nil)
+	dt, err := openTopic(ctx, sbSender, nil)
+	if err != nil {
+		return nil, err
+	}
+	h.topics[dt] = nonexistentTopicName
+	return dt, nil
 }
 
 func (h *harness) CreateSubscription(ctx context.Context, dt driver.Topic, testName string) (ds driver.Subscription, cleanup func(), err error) {
 	subName := sanitize(fmt.Sprintf("%s-sub-%d", testName, atomic.AddUint32(&h.numSubs, 1)))
-	t := dt.(*topic)
-	err = createSubscription(ctx, t.sbTopic.Name, subName, h.ns, nil)
+	topicName := h.topics[dt]
+	err = createSubscription(ctx, topicName, subName, h.adminClient, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var opts []servicebus.SubscriptionOption
+	var opts servicebus.ReceiverOptions
 	if h.autodelete {
-		opts = append(opts, servicebus.SubscriptionWithReceiveAndDelete())
+		opts.ReceiveMode = servicebus.ReceiveModeReceiveAndDelete
 	}
-	sbSub, err := NewSubscription(t.sbTopic, subName, opts)
+	sbReceiver, err := NewReceiver(h.sbClient, topicName, subName, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -124,29 +143,29 @@ func (h *harness) CreateSubscription(ctx context.Context, dt driver.Topic, testN
 	if h.autodelete {
 		sopts.ReceiveAndDelete = true
 	}
-	ds, err = openSubscription(ctx, h.ns, t.sbTopic, sbSub, &sopts)
+	ds, err = openSubscription(ctx, h.sbClient, sbReceiver, &sopts)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	cleanup = func() {
-		sbSub.Close(ctx)
-		deleteSubscription(ctx, t.sbTopic.Name, subName, h.ns)
+		sbReceiver.Close(ctx)
+		deleteSubscription(ctx, topicName, subName, h.adminClient)
 	}
 	return ds, cleanup, nil
 }
 
 func (h *harness) MakeNonexistentSubscription(ctx context.Context) (driver.Subscription, func(), error) {
-	dt, cleanup, err := h.CreateTopic(ctx, "topic-for-nonexistent-sub")
+	const topicName = "topic-for-nonexistent-sub"
+	_, cleanup, err := h.CreateTopic(ctx, topicName)
 	if err != nil {
 		return nil, nil, err
 	}
-	sbTopic := dt.(*topic).sbTopic
-	sbSub, err := NewSubscription(sbTopic, "nonexistent-subscription", nil)
+	sbReceiver, err := NewReceiver(h.sbClient, topicName, "nonexistent-subscription", nil)
 	if err != nil {
 		return nil, cleanup, err
 	}
-	sub, err := openSubscription(ctx, h.ns, sbTopic, sbSub, nil)
+	sub, err := openSubscription(ctx, h.sbClient, sbReceiver, nil)
 	return sub, cleanup, err
 }
 
@@ -183,11 +202,11 @@ func (sbAsTest) Name() string {
 }
 
 func (sbAsTest) TopicCheck(topic *pubsub.Topic) error {
-	var t2 servicebus.Topic
+	var t2 servicebus.Sender
 	if topic.As(&t2) {
 		return fmt.Errorf("cast succeeded for %T, want failure", &t2)
 	}
-	var t3 *servicebus.Topic
+	var t3 *servicebus.Sender
 	if !topic.As(&t3) {
 		return fmt.Errorf("cast failed for %T", &t3)
 	}
@@ -195,11 +214,11 @@ func (sbAsTest) TopicCheck(topic *pubsub.Topic) error {
 }
 
 func (sbAsTest) SubscriptionCheck(sub *pubsub.Subscription) error {
-	var s2 servicebus.Subscription
+	var s2 servicebus.Receiver
 	if sub.As(&s2) {
 		return fmt.Errorf("cast succeeded for %T, want failure", &s2)
 	}
-	var s3 *servicebus.Subscription
+	var s3 *servicebus.Receiver
 	if !sub.As(&s3) {
 		return fmt.Errorf("cast failed for %T", &s3)
 	}
@@ -207,32 +226,26 @@ func (sbAsTest) SubscriptionCheck(sub *pubsub.Subscription) error {
 }
 
 func (sbAsTest) TopicErrorCheck(t *pubsub.Topic, err error) error {
-	var sbError common.Retryable
-	if !t.ErrorAs(err, &sbError) {
-		return fmt.Errorf("failed to convert %v (%T) to a common.Retryable", err, err)
-	}
 	return nil
 }
 
 func (sbAsTest) SubscriptionErrorCheck(s *pubsub.Subscription, err error) error {
-	// We generate our own error for non-existent subscription, so there's no
-	// underlying Azure error type.
 	return nil
 }
 
 func (sbAsTest) MessageCheck(m *pubsub.Message) error {
-	var m2 servicebus.Message
+	var m2 servicebus.ReceivedMessage
 	if m.As(&m2) {
 		return fmt.Errorf("cast succeeded for %T, want failure", &m2)
 	}
-	var m3 *servicebus.Message
+	var m3 *servicebus.ReceivedMessage
 	if !m.As(&m3) {
 		return fmt.Errorf("cast failed for %T", &m3)
 	}
 	return nil
 }
 
-func (sbAsTest) BeforeSend(as func(interface{}) bool) error {
+func (sbAsTest) BeforeSend(as func(any) bool) error {
 	var m *servicebus.Message
 	if !as(&m) {
 		return fmt.Errorf("cast failed for %T", &m)
@@ -240,7 +253,7 @@ func (sbAsTest) BeforeSend(as func(interface{}) bool) error {
 	return nil
 }
 
-func (sbAsTest) AfterSend(as func(interface{}) bool) error {
+func (sbAsTest) AfterSend(as func(any) bool) error {
 	return nil
 }
 
@@ -258,53 +271,58 @@ func sanitize(s string) string {
 }
 
 // createTopic ensures the existence of a Service Bus Topic on a given Namespace.
-func createTopic(ctx context.Context, topicName string, ns *servicebus.Namespace, opts []servicebus.TopicManagementOption) error {
-	tm := ns.NewTopicManager()
-	_, err := tm.Get(ctx, topicName)
-	if err == nil {
-		_ = tm.Delete(ctx, topicName)
+func createTopic(ctx context.Context, topicName string, adminClient *admin.Client, properties *admin.TopicProperties) error {
+	t, _ := adminClient.GetTopic(ctx, topicName, nil)
+	if t != nil {
+		_, _ = adminClient.DeleteTopic(ctx, topicName, nil)
 	}
-	_, err = tm.Put(ctx, topicName, opts...)
+	opts := admin.CreateTopicOptions{
+		Properties: properties,
+	}
+	_, err := adminClient.CreateTopic(ctx, topicName, &opts)
 	return err
 }
 
 // deleteTopic removes a Service Bus Topic on a given Namespace.
-func deleteTopic(ctx context.Context, topicName string, ns *servicebus.Namespace) error {
-	tm := ns.NewTopicManager()
-	te, _ := tm.Get(ctx, topicName)
-	if te != nil {
-		return tm.Delete(ctx, topicName)
+func deleteTopic(ctx context.Context, topicName string, adminClient *admin.Client) error {
+	t, _ := adminClient.GetTopic(ctx, topicName, nil)
+	if t != nil {
+		_, err := adminClient.DeleteTopic(ctx, topicName, nil)
+		return err
 	}
 	return nil
 }
 
 // createSubscription ensures the existence of a Service Bus Subscription on a given Namespace and Topic.
-func createSubscription(ctx context.Context, topicName string, subscriptionName string, ns *servicebus.Namespace, opts []servicebus.SubscriptionManagementOption) error {
-	sm, err := ns.NewSubscriptionManager(topicName)
-	if err != nil {
-		return err
+func createSubscription(ctx context.Context, topicName, subscriptionName string, adminClient *admin.Client, properties *admin.SubscriptionProperties) error {
+	s, _ := adminClient.GetSubscription(ctx, topicName, subscriptionName, nil)
+	if s != nil {
+		_, _ = adminClient.DeleteSubscription(ctx, topicName, subscriptionName, nil)
 	}
-	_, err = sm.Get(ctx, subscriptionName)
-	if err == nil {
-		_ = sm.Delete(ctx, subscriptionName)
+	opts := admin.CreateSubscriptionOptions{
+		Properties: properties,
 	}
-	_, err = sm.Put(ctx, subscriptionName, opts...)
+	_, err := adminClient.CreateSubscription(ctx, topicName, subscriptionName, &opts)
 	return err
 }
 
 // deleteSubscription removes a Service Bus Subscription on a given Namespace and Topic.
-func deleteSubscription(ctx context.Context, topicName string, subscriptionName string, ns *servicebus.Namespace) error {
-	sm, err := ns.NewSubscriptionManager(topicName)
-	if err != nil {
-		return nil
-	}
-	se, _ := sm.Get(ctx, subscriptionName)
+func deleteSubscription(ctx context.Context, topicName, subscriptionName string, adminClient *admin.Client) error {
+	se, _ := adminClient.GetSubscription(ctx, topicName, subscriptionName, nil)
 	if se != nil {
-		_ = sm.Delete(ctx, subscriptionName)
+		_, err := adminClient.DeleteSubscription(ctx, topicName, subscriptionName, nil)
+		return err
 	}
 	return nil
 }
 
+// to run test using Azure Entra credentials:
+// 1. grant access to ${AZURE_CLIENT_ID} to Service Bus namespace
+// 2. run test:
+// AZURE_CLIENT_SECRET='secret' \
+// AZURE_CLIENT_ID=client_id_uud \
+// AZURE_TENANT_ID=tenant_id_uuid \
+// AZURE_SERVICEBUS_HOSTNAME=hostname go test -benchmem -run=^$ -bench ^BenchmarkAzureServiceBusPubSub$ gocloud.dev/pubsub/azuresb
 func BenchmarkAzureServiceBusPubSub(b *testing.B) {
 	const (
 		benchmarkTopicName        = "benchmark-topic"
@@ -312,40 +330,64 @@ func BenchmarkAzureServiceBusPubSub(b *testing.B) {
 	)
 	ctx := context.Background()
 
-	if connString == "" {
-		b.Fatal("azuresb: benchmark requires environment variable SERVICEBUS_CONNECTION_STRING to run")
+	var adminClient *admin.Client
+	var sbClient *servicebus.Client
+	var err error
+
+	if connString == "" && sbHostname == "" {
+		b.Fatal("azuresb: benchmark requires environment variable SERVICEBUS_CONNECTION_STRING or AZURE_SERVICEBUS_HOSTNAME to run")
 	}
-	ns, err := NewNamespaceFromConnectionString(connString)
-	if err != nil {
-		b.Fatal(err)
+
+	if connString != "" {
+		adminClient, err = admin.NewClientFromConnectionString(connString, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		sbClient, err = NewClientFromConnectionString(connString, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+	} else if sbHostname != "" {
+		cred, err := azidentity.NewDefaultAzureCredential(nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		adminClient, err = admin.NewClient(sbHostname, cred, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		sbClient, err = NewClientFromServiceBusHostname(sbHostname, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	// Make topic.
-	if err := createTopic(ctx, benchmarkTopicName, ns, nil); err != nil {
+	if err := createTopic(ctx, benchmarkTopicName, adminClient, nil); err != nil {
 		b.Fatal(err)
 	}
-	defer deleteTopic(ctx, benchmarkTopicName, ns)
+	defer deleteTopic(ctx, benchmarkTopicName, adminClient)
 
-	sbTopic, err := NewTopic(ns, benchmarkTopicName, nil)
+	sbSender, err := NewSender(sbClient, benchmarkTopicName, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer sbTopic.Close(ctx)
-	topic, err := OpenTopic(ctx, sbTopic, nil)
+	defer sbSender.Close(ctx)
+	topic, err := OpenTopic(ctx, sbSender, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer topic.Shutdown(ctx)
 
 	// Make subscription.
-	if err := createSubscription(ctx, benchmarkTopicName, benchmarkSubscriptionName, ns, nil); err != nil {
+	if err := createSubscription(ctx, benchmarkTopicName, benchmarkSubscriptionName, adminClient, nil); err != nil {
 		b.Fatal(err)
 	}
-	sbSub, err := NewSubscription(sbTopic, benchmarkSubscriptionName, nil)
+	sbReceiver, err := NewReceiver(sbClient, benchmarkTopicName, benchmarkSubscriptionName, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
-	sub, err := OpenSubscription(ctx, ns, sbTopic, sbSub, nil)
+	sub, err := OpenSubscription(ctx, sbClient, sbReceiver, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -400,6 +442,10 @@ func TestOpenSubscriptionFromURL(t *testing.T) {
 		{"azuresb://mytopic?subscription=mysub", false},
 		// Missing subscription.
 		{"azuresb://mytopic", true},
+		// Setting listener_timeout.
+		{"azuresb://mytopic?subscription=mysub&listener_timeout=10s", false},
+		// Invalid listener_timeout.
+		{"azuresb://mytopic?subscription=mysub&listener_timeout=xxx", true},
 		// Invalid parameter.
 		{"azuresb://mytopic?subscription=mysub&param=value", true},
 	}

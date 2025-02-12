@@ -83,7 +83,7 @@ func cmdCheck(s string) []byte {
 	return b
 }
 
-// These types are taken from "go mod help edit", in order to parse the JSON
+// GoMod holds "go mod" parameters, taken from "go mod help edit", in order to parse the JSON
 // output of `go mod edit -json`.
 type GoMod struct {
 	Module  Module
@@ -93,17 +93,20 @@ type GoMod struct {
 	Replace []Replace
 }
 
+// Module represents a Go module.
 type Module struct {
 	Path    string
 	Version string
 }
 
+// Require represents a required module.
 type Require struct {
 	Path     string
 	Version  string
 	Indirect bool
 }
 
+// Replace represents a replace directive.
 type Replace struct {
 	Old Module
 	New Module
@@ -124,10 +127,10 @@ func parseModuleInfo(path string) GoMod {
 // Each require in the go.mod file is processed with reqHandler, a callback
 // function. It's called with these arguments:
 //
-//   gomodPath - path to the go.mod file where this 'require' was found
-//   mod - name of the module being 'require'd
-//   modPath - mod's location in the filesystem relative to
-//             the go.mod 'require'ing it
+//	gomodPath - path to the go.mod file where this 'require' was found
+//	mod - name of the module being 'require'd
+//	modPath - mod's location in the filesystem relative to
+//	          the go.mod 'require'ing it
 func runOnGomod(path string, reqHandler func(gomodPath, mod, modPath string)) {
 	gomodPath := filepath.Join(path, "go.mod")
 	fmt.Println("Processing", gomodPath)
@@ -172,13 +175,13 @@ func gomodDropReplace(path string) {
 	})
 }
 
-func gomodSetVersion(path string, v string) {
+func gomodSetVersion(path, v string) {
 	runOnGomod(path, func(gomodPath, mod, modPath string) {
 		cmdCheck(fmt.Sprintf("go mod edit -require=%s@%s %s", mod, v, gomodPath))
 	})
 }
 
-func gomodTag(path string, v string) {
+func gomodTag(path, v string) {
 	var tagName string
 	if path == "." {
 		tagName = v
@@ -243,7 +246,7 @@ func main() {
 		if len(input.Text()) > 0 && !strings.HasPrefix(input.Text(), "#") {
 			fields := strings.Fields(input.Text())
 			if len(fields) != 2 {
-				log.Fatalf("want 2 fields, got '%s'\n", input.Text())
+				log.Fatalf("want 2 fields, got %q\n", input.Text())
 			}
 			// "tag" only runs if the released field is "yes". Other commands run
 			// for every line.

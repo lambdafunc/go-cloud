@@ -22,9 +22,11 @@ jobs:
         # Note: we used to include windows-latest, but it's super
         # flaky on Github runners, lots of OOMs.
         os: [ubuntu-latest, macos-latest]
-        go-version: [1.17.x]
+        # When updating this, make sure to also update the
+        # latest_go_version variable in internal/testing/runchecks.sh.
+        go-version: [1.24.x]
         include:
-          - go-version: 1.16.x
+          - go-version: 1.23.x
             os: ubuntu-latest
 
     runs-on: ${{ matrix.os }}
@@ -40,3 +42,10 @@ jobs:
       - name: Run Tests
         shell: bash
         run: 'internal/testing/runchecks.sh'
+      - if: matrix.os == 'ubuntu-latest'
+        name: Build for dragonfly
+        run: |
+          go install ./...
+        env:
+          GOARCH: amd64
+          GOOS: dragonfly

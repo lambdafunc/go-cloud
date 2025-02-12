@@ -15,7 +15,7 @@
 // Package gcppostgres provides connections to managed PostgreSQL Cloud SQL instances.
 // See https://cloud.google.com/sql/docs/postgres/ for more information.
 //
-// URLs
+// # URLs
 //
 // For postgres.Open, gcppostgres registers for the scheme "gcppostgres".
 // The default URL opener will create a connection using the default
@@ -75,7 +75,7 @@ func (o *lazyCredsOpener) OpenPostgresURL(ctx context.Context, u *url.URL) (*sql
 			o.err = err
 			return
 		}
-		certSource := cloudsql.NewCertSource(client)
+		certSource := cloudsql.NewCertSourceWithIAM(client, creds.TokenSource)
 		o.opener = &URLOpener{CertSource: certSource}
 	})
 	if o.err != nil {

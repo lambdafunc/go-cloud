@@ -55,6 +55,8 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	ctx := context.Background()
 	conn, done := setup.NewGCPgRPCConn(ctx, t, endPoint, "runtimevar")
 	client := pb.NewRuntimeConfigManagerClient(conn)
@@ -215,6 +217,10 @@ func TestOpenVariable(t *testing.T) {
 		{"gcpruntimeconfig://myproject/mycfg/myvar?decoder=notadecoder", true},
 		// Invalid param.
 		{"gcpruntimeconfig://myproject/mycfg/myvar?param=value", true},
+		// OK, setting wait.
+		{"gcpruntimeconfig://projects/myproject/configs/mycfg/variables/myvar?wait=1m", false},
+		// Invalid wait.
+		{"gcpruntimeconfig://projects/myproject/configs/mycfg/variables/myvar?wait=xx", true},
 	}
 
 	ctx := context.Background()

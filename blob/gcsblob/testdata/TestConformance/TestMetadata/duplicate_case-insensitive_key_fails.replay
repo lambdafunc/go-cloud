@@ -1,12 +1,14 @@
 {
-  "Initial": "AQAAAA7XW2a6M8tfrf4g",
+  "Initial": "AQAAAA7eTdH1Ax7uBAAA",
   "Version": "0.2",
   "Converter": {
     "ScrubBody": null,
     "ClearHeaders": [
       "^X-Goog-.*Encryption-Key$",
       "^Expires$",
-      "^Signature$"
+      "^Signature$",
+      "^X-Goog-Gcs-Idempotency-Token$",
+      "^User-Agent$"
     ],
     "RemoveRequestHeaders": [
       "^Authorization$",

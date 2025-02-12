@@ -69,6 +69,8 @@ func (h *harness) Mutable() bool {
 }
 
 func newHarness(t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	return &harness{
 		mockServer: newMockServer(),
 	}, nil
@@ -219,6 +221,67 @@ func TestWatcher_WatchVariable(t *testing.T) {
 	})
 }
 
+func TestWithAuth(t *testing.T) {
+	const (
+		authUser = "test_user"
+		authPwd  = "test_pwd"
+		value    = "hello world"
+	)
+	h, err := newHarness(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	mockServer := h.(*harness).mockServer
+	testURL := mockServer.baseURL + "/string-var?decoder=string"
+	mockServer.authUser = authUser
+	mockServer.authPwd = authPwd
+
+	ctx := context.Background()
+	if err := h.CreateVariable(ctx, "string-var", []byte(value)); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		AuthUser string
+		AuthPwd  string
+		WantErr  bool
+	}{
+		// No auth provided, fails.
+		{"", "", true},
+		// Invalid user, fails.
+		{"wronguser", authPwd, true},
+		// Invalid password, fails.
+		{authUser, "wrongpassword", true},
+		// Auth good, works.
+		{authUser, authPwd, false},
+	}
+
+	for _, test := range tests {
+		name := fmt.Sprintf("user=%s,pwd=%s", test.AuthUser, test.AuthPwd)
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HTTPVAR_AUTH_USERNAME", test.AuthUser)
+			t.Setenv("HTTPVAR_AUTH_PASSWORD", test.AuthPwd)
+
+			v, err := runtimevar.OpenVariable(ctx, testURL)
+			if err != nil {
+				t.Fatalf("failed OpenVariable: %v", err)
+			}
+			defer v.Close()
+			snapshot, err := v.Watch(ctx)
+			if (err != nil) != test.WantErr {
+				t.Errorf("got Watch error %v, want error %v", err, test.WantErr)
+			}
+			if err != nil {
+				return
+			}
+			if !cmp.Equal(snapshot.Value, value) {
+				t.Errorf("got snapshot value\n%v\n  want\n%v", snapshot.Value, value)
+			}
+		})
+	}
+}
+
 func TestOpenVariableURL(t *testing.T) {
 	h, err := newHarness(t)
 	if err != nil {
@@ -239,7 +302,7 @@ func TestOpenVariableURL(t *testing.T) {
 		URL          string
 		WantErr      bool
 		WantWatchErr bool
-		Want         interface{}
+		Want         any
 	}{
 		// Nonexistentvar does not exist, so we get an error from Watch.
 		{baseURL + "/nonexistentvar", false, true, nil},
@@ -250,7 +313,11 @@ func TestOpenVariableURL(t *testing.T) {
 		// Working example with default decoder.
 		{baseURL + "/string-var", false, false, []byte("hello world")},
 		// Working example with JSON decoder.
-		{baseURL + "/json-var?decoder=jsonmap", false, false, &map[string]interface{}{"Foo": "Bar"}},
+		{baseURL + "/json-var?decoder=jsonmap", false, false, &map[string]any{"Foo": "Bar"}},
+		// Setting wait.
+		{baseURL + "/string-var?decoder=string&wait=1m", false, false, "hello world"},
+		// Invalid wait.
+		{baseURL + "/string-var?decoder=string&wait=xx", true, false, nil},
 	}
 
 	for _, test := range tests {
@@ -280,10 +347,12 @@ func TestOpenVariableURL(t *testing.T) {
 type mockServer struct {
 	baseURL   string
 	close     func()
-	responses map[string]interface{}
+	responses map[string]any
+	authUser  string
+	authPwd   string
 }
 
-func (m *mockServer) SetResponse(name string, response interface{}) {
+func (m *mockServer) SetResponse(name string, response any) {
 	m.responses[name] = response
 }
 
@@ -292,10 +361,17 @@ func (m *mockServer) DeleteResponse(name string) {
 }
 
 func newMockServer() *mockServer {
-	mock := &mockServer{responses: map[string]interface{}{}}
+	mock := &mockServer{responses: map[string]any{}}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if mock.authUser != "" {
+			user, pwd, ok := r.BasicAuth()
+			if !ok || user != mock.authUser || pwd != mock.authPwd {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+		}
 		resp := mock.responses[strings.TrimPrefix(r.URL.String(), "/")]
 		if resp == nil {
 			w.WriteHeader(http.StatusNotFound)

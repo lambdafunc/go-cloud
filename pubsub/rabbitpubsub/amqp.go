@@ -17,7 +17,11 @@ package rabbitpubsub
 // Interfaces for the AMQP protocol, and adapters for the real amqp client.
 // Fake implementations of the interfaces are in fake_test.go
 
-import "github.com/streadway/amqp"
+import (
+	"context"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
 
 // Values we use for the amqp client.
 // See https://www.rabbitmq.com/amqp-0-9-1-reference.html.
@@ -27,10 +31,6 @@ const (
 	// response. We always want to wait.
 	wait = false
 
-	// Always use the empty routing key. This driver expects to be used with topic
-	// exchanges, which disregard the routing key.
-	routingKey = ""
-
 	// If the message can't be enqueued, return it to the sender rather than silently
 	// dropping it.
 	mandatory = true
@@ -39,15 +39,16 @@ const (
 	immediate = false
 )
 
-// See https://godoc.org/github.com/streadway/amqp#Connection for the documentation of these methods.
+// See https://pkg.go.dev/github.com/rabbitmq/amqp091-go#Connection for the documentation of these methods.
 type amqpConnection interface {
 	Channel() (amqpChannel, error)
 	Close() error
 }
 
-// See https://godoc.org/github.com/streadway/amqp#Channel for the documentation of these methods.
+// See https://pkg.go.dev/github.com/rabbitmq/amqp091-go#Channel for the documentation of these methods.
 type amqpChannel interface {
-	Publish(exchange string, msg amqp.Publishing) error
+	Publish(exchange, routingKey string, msg amqp.Publishing) error
+	PublishWithContext(ctx context.Context, exchange, routingKey string, msg amqp.Publishing) error
 	Consume(queue, consumer string) (<-chan amqp.Delivery, error)
 	Ack(tag uint64) error
 	Nack(tag uint64) error
@@ -60,6 +61,7 @@ type amqpChannel interface {
 	QueueDeclareAndBind(qname, ename string) error
 	ExchangeDelete(string) error
 	QueueDelete(qname string) error
+	Qos(prefetchCount, prefetchSize int, global bool) error
 }
 
 // connection adapts an *amqp.Connection to the amqpConnection interface.
@@ -77,6 +79,7 @@ func (c *connection) Channel() (amqpChannel, error) {
 	if err := ch.Confirm(wait); err != nil {
 		return nil, err
 	}
+
 	return &channel{ch}, nil
 }
 
@@ -89,8 +92,12 @@ type channel struct {
 	ch *amqp.Channel
 }
 
-func (ch *channel) Publish(exchange string, msg amqp.Publishing) error {
-	return ch.ch.Publish(exchange, routingKey, mandatory, immediate, msg)
+func (ch *channel) Publish(exchange, routingKey string, msg amqp.Publishing) error {
+	return ch.PublishWithContext(context.Background(), exchange, routingKey, msg)
+}
+
+func (ch *channel) PublishWithContext(ctx context.Context, exchange, routingKey string, msg amqp.Publishing) error {
+	return ch.ch.PublishWithContext(ctx, exchange, routingKey, mandatory, immediate, msg)
 }
 
 func (ch *channel) Consume(queue, consumer string) (<-chan amqp.Delivery, error) {
@@ -136,10 +143,10 @@ func (ch *channel) NotifyClose(c chan *amqp.Error) chan *amqp.Error {
 
 func (ch *channel) ExchangeDeclare(name string) error {
 	return ch.ch.ExchangeDeclare(name,
-		"fanout", // kind
-		false,    // durable
-		false,    // delete when unused
-		false,    // internal
+		amqp.ExchangeFanout, // kind
+		false,               // durable
+		false,               // delete when unused
+		false,               // internal
 		wait,
 		nil) // args
 }
@@ -165,4 +172,8 @@ func (ch *channel) ExchangeDelete(name string) error {
 func (ch *channel) QueueDelete(qname string) error {
 	_, err := ch.ch.QueueDelete(qname, false, false, false)
 	return err
+}
+
+func (ch *channel) Qos(prefetchCount, prefetchSize int, global bool) error {
+	return ch.ch.Qos(prefetchCount, prefetchSize, global)
 }

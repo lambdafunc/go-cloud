@@ -23,21 +23,29 @@
 		"imports": "import \"gocloud.dev/blob\"",
 		"code": "// Wrap the bucket using blob.PrefixedBucket.\n// The prefix should end with \"/\", so that the resulting bucket operates\n// in a subfolder.\nbucket = blob.PrefixedBucket(bucket, \"a/subfolder/\")\n\n// The original bucket is no longer usable; it has been closed.\n// The wrapped bucket should be closed when done.\ndefer bucket.Close()\n\n// Bucket operations on \u003ckey\u003e will be translated to \"a/subfolder/\u003ckey\u003e\"."
 	},
+	"gocloud.dev/blob.ExampleSingleKeyBucket": {
+		"imports": "import \"gocloud.dev/blob\"",
+		"code": "// Wrap the bucket using blob.SingleKeyBucket.\n// The bucket always references the provided key.\nbucket = blob.SingleKeyBucket(bucket, \"foo.txt\")\n\n// The original bucket is no longer usable; it has been closed.\n// The wrapped bucket should be closed when done.\ndefer bucket.Close()\n\n// Bucket operations will ignore the passed-in key and always reference foo.txt."
+	},
 	"gocloud.dev/blob.Example_openFromURLWithPrefix": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/blob\"\n)",
 		"code": "// Connect to a bucket using a URL, using the \"prefix\" query parameter to\n// target a subfolder in the bucket.\n// The prefix should end with \"/\", so that the resulting bucket operates\n// in a subfolder.\nb, err := blob.OpenBucket(ctx, \"mem://?prefix=a/subfolder/\")\nif err != nil {\n\treturn err\n}\ndefer b.Close()\n\n// Bucket operations on \u003ckey\u003e will be translated to \"a/subfolder/\u003ckey\u003e\"."
 	},
+	"gocloud.dev/blob.Example_openFromURLWithSingleKey": {
+		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/blob\"\n)",
+		"code": "// Connect to a bucket using a URL, using the \"key\" query parameter to\n// make the bucket always reference that key.\nb, err := blob.OpenBucket(ctx, \"mem://?key=foo.txt\")\nif err != nil {\n\treturn err\n}\ndefer b.Close()\n\n// Bucket operations will ignore the passed-in key and always reference foo.txt."
+	},
 	"gocloud.dev/blob/azureblob.ExampleOpenBucket": {
-		"imports": "import (\n\t\"context\"\n\n\t\"github.com/Azure/azure-storage-blob-go/azblob\"\n\t\"gocloud.dev/blob/azureblob\"\n)",
-		"code": "const (\n\t// Fill in with your Azure Storage Account and Access Key.\n\taccountName azureblob.AccountName = \"my-account\"\n\taccountKey  azureblob.AccountKey  = \"my-account-key\"\n\t// Fill in with the storage container to access.\n\tcontainerName = \"my-container\"\n)\n\n// Create a credentials object.\ncredential, err := azureblob.NewCredential(accountName, accountKey)\nif err != nil {\n\treturn err\n}\n\n// Create a Pipeline, using whatever PipelineOptions you need.\npipeline := azureblob.NewPipeline(credential, azblob.PipelineOptions{})\n\n// Create a *blob.Bucket.\n// The credential Option is required if you're going to use blob.SignedURL.\nbucket, err := azureblob.OpenBucket(ctx, pipeline, accountName, containerName,\n\t\u0026azureblob.Options{Credential: credential})\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
+		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/blob/azureblob\"\n)",
+		"code": "const (\n\t// The storage container to access.\n\tcontainerName = \"my-container\"\n)\n\n// Construct the service URL.\n// There are many forms of service URLs, see ServiceURLOptions.\nopts := azureblob.NewDefaultServiceURLOptions()\nserviceURL, err := azureblob.NewServiceURL(opts)\nif err != nil {\n\treturn err\n}\n\n// There are many ways to authenticate to Azure.\n// This approach uses environment variables as described in azureblob package\n// documentation.\n// For example, to use shared key authentication, you would set\n// AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_KEY.\n// To use a SAS token, you would set AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_SAS_TOKEN.\n// You can also construct a client using the azblob constructors directly, like\n// azblob.NewServiceClientWithSharedKey.\nclient, err := azureblob.NewDefaultClient(serviceURL, containerName)\nif err != nil {\n\treturn err\n}\n\n// Create a *blob.Bucket.\nb, err := azureblob.OpenBucket(ctx, client, nil)\nif err != nil {\n\treturn err\n}\ndefer b.Close()\n\n// Now we can use b to read or write files to the container.\ndata, err := b.ReadAll(ctx, \"my-key\")\nif err != nil {\n\treturn err\n}\n_ = data"
 	},
 	"gocloud.dev/blob/azureblob.Example_openBucketFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/blob\"\n\t_ \"gocloud.dev/blob/azureblob\"\n)",
-		"code": "// blob.OpenBucket creates a *blob.Bucket from a URL.\n// This URL will open the container \"my-container\" using default\n// credentials found in the environment variables\n// AZURE_STORAGE_ACCOUNT plus at least one of AZURE_STORAGE_KEY\n// and AZURE_STORAGE_SAS_TOKEN.\nbucket, err := blob.OpenBucket(ctx, \"azblob://my-container\")\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
+		"code": "// blob.OpenBucket creates a *blob.Bucket from a URL.\n// This URL will open the container \"my-container\" using default\n// credentials found in environment variables as documented in\n// the package.\n// Assuming AZURE_STORAGE_ACCOUNT is set to \"myaccount\",\n// and other options aren't set, the service URL will look like:\n// \"https://myaccount.blob.core.windows.net/my-container\".\nbucket, err := blob.OpenBucket(ctx, \"azblob://my-container\")\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()\n\n// Another example, against a local emulator.\n// Assuming AZURE_STORAGE_ACCOUNT is set to \"myaccount\",\n// the service URL will look like:\n// \"http://localhost:10001/myaccount/my-container\".\nlocalbucket, err := blob.OpenBucket(ctx, \"azblob://my-container?protocol=http\u0026domain=localhost:10001\")\nif err != nil {\n\treturn err\n}\ndefer localbucket.Close()"
 	},
 	"gocloud.dev/blob/fileblob.ExampleOpenBucket": {
 		"imports": "import (\n\t\"os\"\n\n\t\"gocloud.dev/blob/fileblob\"\n)",
-		"code": "// The directory you pass to fileblob.OpenBucket must exist first.\nconst myDir = \"path/to/local/directory\"\nif err := os.MkdirAll(myDir, 0777); err != nil {\n\treturn err\n}\n\n// Create a file-based bucket.\nbucket, err := fileblob.OpenBucket(myDir, nil)\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
+		"code": "// The directory you pass to fileblob.OpenBucket must exist first.\nconst myDir = \"path/to/local/directory\"\nif err := os.MkdirAll(myDir, 0o777); err != nil {\n\treturn err\n}\n\n// Create a file-based bucket.\nbucket, err := fileblob.OpenBucket(myDir, nil)\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
 	},
 	"gocloud.dev/blob/gcsblob.ExampleOpenBucket": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/blob/gcsblob\"\n\t\"gocloud.dev/gcp\"\n)",
@@ -55,9 +63,13 @@
 		"imports": "import (\n\t\"context\"\n\n\t\"github.com/aws/aws-sdk-go/aws\"\n\t\"github.com/aws/aws-sdk-go/aws/session\"\n\t\"gocloud.dev/blob/s3blob\"\n)",
 		"code": "// Establish an AWS session.\n// See https://docs.aws.amazon.com/sdk-for-go/api/aws/session/ for more info.\n// The region must match the region for \"my-bucket\".\nsess, err := session.NewSession(\u0026aws.Config{\n\tRegion: aws.String(\"us-west-1\"),\n})\nif err != nil {\n\treturn err\n}\n\n// Create a *blob.Bucket.\nbucket, err := s3blob.OpenBucket(ctx, sess, \"my-bucket\", nil)\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
 	},
+	"gocloud.dev/blob/s3blob.ExampleOpenBucketV2": {
+		"imports": "import (\n\t\"context\"\n\n\tawsv2cfg \"github.com/aws/aws-sdk-go-v2/config\"\n\ts3v2 \"github.com/aws/aws-sdk-go-v2/service/s3\"\n\t\"gocloud.dev/blob/s3blob\"\n)",
+		"code": "// Establish a AWS V2 Config.\n// See https://aws.github.io/aws-sdk-go-v2/docs/configuring-sdk/ for more info.\ncfg, err := awsv2cfg.LoadDefaultConfig(ctx)\nif err != nil {\n\treturn err\n}\n\n// Create a *blob.Bucket.\nclientV2 := s3v2.NewFromConfig(cfg)\nbucket, err := s3blob.OpenBucketV2(ctx, clientV2, \"my-bucket\", nil)\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
+	},
 	"gocloud.dev/blob/s3blob.Example_openBucketFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/blob\"\n\t_ \"gocloud.dev/blob/s3blob\"\n)",
-		"code": "// blob.OpenBucket creates a *blob.Bucket from a URL.\nbucket, err := blob.OpenBucket(ctx, \"s3://my-bucket?region=us-west-1\")\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
+		"code": "// blob.OpenBucket creates a *blob.Bucket from a URL.\nbucket, err := blob.OpenBucket(ctx, \"s3://my-bucket?region=us-west-1\")\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()\n\n// Forcing AWS SDK V2.\nbucket, err = blob.OpenBucket(ctx, \"s3://my-bucket?region=us-west-1\u0026awssdk=v2\")\nif err != nil {\n\treturn err\n}\ndefer bucket.Close()"
 	},
 	"gocloud.dev/docstore.ExampleCollection_Actions_bulkWrite": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/docstore\"\n)",
@@ -189,11 +201,11 @@
 	},
 	"gocloud.dev/pubsub/azuresb.ExampleOpenSubscription": {
 		"imports": "import (\n\t\"context\"\n\t\"os\"\n\n\t\"gocloud.dev/pubsub/azuresb\"\n)",
-		"code": "// Change these as needed for your application.\nserviceBusConnString := os.Getenv(\"SERVICEBUS_CONNECTION_STRING\")\nconst topicName = \"test-topic\"\nconst subscriptionName = \"test-subscription\"\n\n// Connect to Azure Service Bus for the given subscription.\nbusNamespace, err := azuresb.NewNamespaceFromConnectionString(serviceBusConnString)\nif err != nil {\n\treturn err\n}\nbusTopic, err := azuresb.NewTopic(busNamespace, topicName, nil)\nif err != nil {\n\treturn err\n}\ndefer busTopic.Close(ctx)\nbusSub, err := azuresb.NewSubscription(busTopic, subscriptionName, nil)\nif err != nil {\n\treturn err\n}\ndefer busSub.Close(ctx)\n\n// Construct a *pubsub.Subscription.\nsubscription, err := azuresb.OpenSubscription(ctx,\n\tbusNamespace, busTopic, busSub, nil)\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
+		"code": "// Change these as needed for your application.\nserviceBusConnString := os.Getenv(\"SERVICEBUS_CONNECTION_STRING\")\nconst topicName = \"test-topic\"\nconst subscriptionName = \"test-subscription\"\n\n// Connect to Azure Service Bus for the given subscription.\nsbClient, err := azuresb.NewClientFromConnectionString(serviceBusConnString, nil)\nif err != nil {\n\treturn err\n}\nsbReceiver, err := azuresb.NewReceiver(sbClient, topicName, subscriptionName, nil)\nif err != nil {\n\treturn err\n}\ndefer sbReceiver.Close(ctx)\n\n// Construct a *pubsub.Subscription.\nsubscription, err := azuresb.OpenSubscription(ctx, sbClient, sbReceiver, nil)\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
 	},
 	"gocloud.dev/pubsub/azuresb.ExampleOpenTopic": {
 		"imports": "import (\n\t\"context\"\n\t\"os\"\n\n\t\"gocloud.dev/pubsub/azuresb\"\n)",
-		"code": "// Change these as needed for your application.\nconnString := os.Getenv(\"SERVICEBUS_CONNECTION_STRING\")\ntopicName := \"test-topic\"\n\nif connString == \"\" {\n\tlog.Fatal(\"Service Bus ConnectionString is not set\")\n}\n\n// Connect to Azure Service Bus for the given topic.\nbusNamespace, err := azuresb.NewNamespaceFromConnectionString(connString)\nif err != nil {\n\treturn err\n}\nbusTopic, err := azuresb.NewTopic(busNamespace, topicName, nil)\nif err != nil {\n\treturn err\n}\ndefer busTopic.Close(ctx)\n\n// Construct a *pubsub.Topic.\ntopic, err := azuresb.OpenTopic(ctx, busTopic, nil)\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
+		"code": "// Change these as needed for your application.\nconnString := os.Getenv(\"SERVICEBUS_CONNECTION_STRING\")\ntopicName := \"test-topic\"\n\nif connString == \"\" {\n\tlog.Fatal(\"Service Bus ConnectionString is not set\")\n}\n\n// Connect to Azure Service Bus for the given topic.\nsbClient, err := azuresb.NewClientFromConnectionString(connString, nil)\nif err != nil {\n\treturn err\n}\nsbSender, err := azuresb.NewSender(sbClient, topicName, nil)\nif err != nil {\n\treturn err\n}\ndefer sbSender.Close(ctx)\n\n// Construct a *pubsub.Topic.\ntopic, err := azuresb.OpenTopic(ctx, sbSender, nil)\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
 	},
 	"gocloud.dev/pubsub/azuresb.Example_openSubscriptionFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/azuresb\"\n)",
@@ -233,7 +245,7 @@
 	},
 	"gocloud.dev/pubsub/kafkapubsub.Example_openTopicFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/kafkapubsub\"\n)",
-		"code": "// pubsub.OpenTopic creates a *pubsub.Topic from a URL.\n// The host + path are the topic name to send to.\n// The set of brokers must be in an environment variable KAFKA_BROKERS.\ntopic, err := pubsub.OpenTopic(ctx, \"kafka://my-topic\")\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
+		"code": "// pubsub.OpenTopic creates a *pubsub.Topic from a URL.\n// The host + path are the topic name to send to.\n// The set of brokers must be in an environment variable KAFKA_BROKERS.\ntopic, err := pubsub.OpenTopic(ctx, \"kafka://my-topic?key_name=x-partition-key\")\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
 	},
 	"gocloud.dev/pubsub/mempubsub.ExampleNewSubscription": {
 		"imports": "import (\n\t\"context\"\n\t\"time\"\n\n\t\"gocloud.dev/pubsub/mempubsub\"\n)",
@@ -251,17 +263,25 @@
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/mempubsub\"\n)",
 		"code": "topic, err := pubsub.OpenTopic(ctx, \"mem://topicA\")\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
 	},
-	"gocloud.dev/pubsub/natspubsub.ExampleOpenQueueSubscription": {
-		"imports": "import (\n\t\"context\"\n\n\t\"github.com/nats-io/nats.go\"\n\t\"gocloud.dev/pubsub/natspubsub\"\n)",
-		"code": "natsConn, err := nats.Connect(\"nats://nats.example.com\")\nif err != nil {\n\treturn err\n}\ndefer natsConn.Close()\n\nsubscription, err := natspubsub.OpenSubscription(\n\tnatsConn,\n\t\"example.mysubject\",\n\t\u0026natspubsub.SubscriptionOptions{Queue: \"queue1\"})\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
-	},
 	"gocloud.dev/pubsub/natspubsub.ExampleOpenSubscription": {
 		"imports": "import (\n\t\"context\"\n\n\t\"github.com/nats-io/nats.go\"\n\t\"gocloud.dev/pubsub/natspubsub\"\n)",
 		"code": "natsConn, err := nats.Connect(\"nats://nats.example.com\")\nif err != nil {\n\treturn err\n}\ndefer natsConn.Close()\n\nsubscription, err := natspubsub.OpenSubscription(\n\tnatsConn,\n\t\"example.mysubject\",\n\tnil)\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
 	},
+	"gocloud.dev/pubsub/natspubsub.ExampleOpenSubscriptionV2": {
+		"imports": "import (\n\t\"context\"\n\n\t\"github.com/nats-io/nats.go\"\n\t\"gocloud.dev/pubsub/natspubsub\"\n)",
+		"code": "subscription, err := natspubsub.OpenSubscriptionV2(\n\tnatsConn,\n\t\"example.mysubject\",\n\tnil)\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
+	},
+	"gocloud.dev/pubsub/natspubsub.ExampleOpenSubscription_queue": {
+		"imports": "import (\n\t\"context\"\n\n\t\"github.com/nats-io/nats.go\"\n\t\"gocloud.dev/pubsub/natspubsub\"\n)",
+		"code": "natsConn, err := nats.Connect(\"nats://nats.example.com\")\nif err != nil {\n\treturn err\n}\ndefer natsConn.Close()\n\nsubscription, err := natspubsub.OpenSubscription(\n\tnatsConn,\n\t\"example.mysubject\",\n\t\u0026natspubsub.SubscriptionOptions{Queue: \"queue1\"})\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
+	},
 	"gocloud.dev/pubsub/natspubsub.ExampleOpenTopic": {
 		"imports": "import (\n\t\"context\"\n\n\t\"github.com/nats-io/nats.go\"\n\t\"gocloud.dev/pubsub/natspubsub\"\n)",
 		"code": "natsConn, err := nats.Connect(\"nats://nats.example.com\")\nif err != nil {\n\treturn err\n}\ndefer natsConn.Close()\n\ntopic, err := natspubsub.OpenTopic(natsConn, \"example.mysubject\", nil)\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
+	},
+	"gocloud.dev/pubsub/natspubsub.ExampleOpenTopicV2": {
+		"imports": "import (\n\t\"context\"\n\n\t\"github.com/nats-io/nats.go\"\n\t\"gocloud.dev/pubsub/natspubsub\"\n)",
+		"code": "natsConn, err := nats.Connect(\"nats://nats.example.com\")\nif err != nil {\n\treturn err\n}\ndefer natsConn.Close()\n\ntopic, err := natspubsub.OpenTopicV2(natsConn, \"example.mysubject\", nil)\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
 	},
 	"gocloud.dev/pubsub/natspubsub.Example_openQueueSubscriptionFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/natspubsub\"\n)",
@@ -271,16 +291,24 @@
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/natspubsub\"\n)",
 		"code": "// pubsub.OpenSubscription creates a *pubsub.Subscription from a URL.\n// This URL will Dial the NATS server at the URL in the environment variable\n// NATS_SERVER_URL and receive messages with subject \"example.mysubject\".\nsubscription, err := pubsub.OpenSubscription(ctx, \"nats://example.mysubject\")\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
 	},
+	"gocloud.dev/pubsub/natspubsub.Example_openSubscriptionV2FromURL": {
+		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/natspubsub\"\n)",
+		"code": "// pubsub.OpenSubscription creates a *pubsub.Subscription from a URL.\n// This URL will Dial the NATS server at the URL in the environment variable\n// NATS_SERVER_URL and receive messages with subject \"example.mysubject\".\n// This URL will be parsed and the natsv2 attribute will be used to\n// use NATS v2.2.0+ native message headers as the message metadata.\nsubscription, err := pubsub.OpenSubscription(ctx, \"nats://example.mysubject?natsv2\")\nif err != nil {\n\treturn err\n}\ndefer subscription.Shutdown(ctx)"
+	},
 	"gocloud.dev/pubsub/natspubsub.Example_openTopicFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/natspubsub\"\n)",
 		"code": "// pubsub.OpenTopic creates a *pubsub.Topic from a URL.\n// This URL will Dial the NATS server at the URL in the environment variable\n// NATS_SERVER_URL and send messages with subject \"example.mysubject\".\ntopic, err := pubsub.OpenTopic(ctx, \"nats://example.mysubject\")\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
 	},
+	"gocloud.dev/pubsub/natspubsub.Example_openTopicV2FromURL": {
+		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/pubsub\"\n\t_ \"gocloud.dev/pubsub/natspubsub\"\n)",
+		"code": "// pubsub.OpenTopic creates a *pubsub.Topic from a URL.\n// This URL will Dial the NATS server at the URL in the environment variable\n// NATS_SERVER_URL and send messages with subject \"example.mysubject\".\n// This URL will be parsed and the natsv2 attribute will be used to\n// use NATS v2.2.0+ native message headers as the message metadata.\ntopic, err := pubsub.OpenTopic(ctx, \"nats://example.mysubject?natsv2\")\nif err != nil {\n\treturn err\n}\ndefer topic.Shutdown(ctx)"
+	},
 	"gocloud.dev/pubsub/rabbitpubsub.ExampleOpenSubscription": {
-		"imports": "import (\n\t\"context\"\n\n\t\"github.com/streadway/amqp\"\n\t\"gocloud.dev/pubsub/rabbitpubsub\"\n)",
+		"imports": "import (\n\t\"context\"\n\n\tamqp \"github.com/rabbitmq/amqp091-go\"\n\t\"gocloud.dev/pubsub/rabbitpubsub\"\n)",
 		"code": "rabbitConn, err := amqp.Dial(\"amqp://guest:guest@localhost:5672/\")\nif err != nil {\n\treturn err\n}\ndefer rabbitConn.Close()\nsubscription := rabbitpubsub.OpenSubscription(rabbitConn, \"myqueue\", nil)\ndefer subscription.Shutdown(ctx)"
 	},
 	"gocloud.dev/pubsub/rabbitpubsub.ExampleOpenTopic": {
-		"imports": "import (\n\t\"context\"\n\n\t\"github.com/streadway/amqp\"\n\t\"gocloud.dev/pubsub/rabbitpubsub\"\n)",
+		"imports": "import (\n\t\"context\"\n\n\tamqp \"github.com/rabbitmq/amqp091-go\"\n\t\"gocloud.dev/pubsub/rabbitpubsub\"\n)",
 		"code": "rabbitConn, err := amqp.Dial(\"amqp://guest:guest@localhost:5672/\")\nif err != nil {\n\treturn err\n}\ndefer rabbitConn.Close()\ntopic := rabbitpubsub.OpenTopic(rabbitConn, \"myexchange\", nil)\ndefer topic.Shutdown(ctx)"
 	},
 	"gocloud.dev/pubsub/rabbitpubsub.Example_openSubscriptionFromURL": {
@@ -333,7 +361,15 @@
 	},
 	"gocloud.dev/runtimevar/constantvar.Example_openVariableFromURL": {
 		"imports": "import (\n\t\"context\"\n\t\"fmt\"\n\n\t\"gocloud.dev/runtimevar\"\n\t_ \"gocloud.dev/runtimevar/constantvar\"\n)",
-		"code": "// runtimevar.OpenVariable creates a *runtimevar.Variable from a URL.\n\nv, err := runtimevar.OpenVariable(ctx, \"constant://?val=hello+world\u0026decoder=string\")\nif err != nil {\n\treturn err\n}\ndefer v.Close()"
+		"code": "// runtimevar.OpenVariable creates a *runtimevar.Variable from a URL.\n// The constant value is in the URL param \"val\".\nv, err := runtimevar.OpenVariable(ctx, \"constant://?val=hello+world\u0026decoder=string\")\nif err != nil {\n\treturn err\n}\ndefer v.Close()\n\n// The constant value is read from an environment variable specified in \"envvar\".\nv2, err := runtimevar.OpenVariable(ctx, \"constant://?envvar=MY_ENVIRONMENT_VARIABLE\u0026decoder=string\")\nif err != nil {\n\treturn err\n}\ndefer v2.Close()"
+	},
+	"gocloud.dev/runtimevar/etcdvar.ExampleOpenVariable": {
+		"imports": "import (\n\t\"go.etcd.io/etcd/client/v3\"\n\t\"gocloud.dev/runtimevar\"\n\t\"gocloud.dev/runtimevar/etcdvar\"\n)",
+		"code": "// Connect to the etcd server.\nclient, err := clientv3.NewFromURL(\"http://your.etcd.server:9999\")\nif err != nil {\n\treturn err\n}\n\n// Construct a *runtimevar.Variable that watches the variable.\nv, err := etcdvar.OpenVariable(client, \"cfg-variable-name\", runtimevar.StringDecoder, nil)\nif err != nil {\n\treturn err\n}\ndefer v.Close()"
+	},
+	"gocloud.dev/runtimevar/etcdvar.Example_openVariableFromURL": {
+		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/runtimevar\"\n\t_ \"gocloud.dev/runtimevar/etcdvar\"\n)",
+		"code": "// runtimevar.OpenVariable creates a *runtimevar.Variable from a URL.\n// The default opener connects to an etcd server based on the environment\n// variable ETCD_SERVER_URL.\n\nv, err := runtimevar.OpenVariable(ctx, \"etcd://myvarname?decoder=string\")\nif err != nil {\n\treturn err\n}\ndefer v.Close()"
 	},
 	"gocloud.dev/runtimevar/filevar.Example_openVariableFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/runtimevar\"\n\t_ \"gocloud.dev/runtimevar/filevar\"\n)",
@@ -381,11 +417,11 @@
 	},
 	"gocloud.dev/secrets/awskms.Example_openFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/secrets\"\n\t_ \"gocloud.dev/secrets/awskms\"\n)",
-		"code": "// Use one of the following:\n\n// 1. By ID.\nkeeperByID, err := secrets.OpenKeeper(ctx,\n\t\"awskms://1234abcd-12ab-34cd-56ef-1234567890ab?region=us-east-1\")\nif err != nil {\n\treturn err\n}\ndefer keeperByID.Close()\n\n// 2. By alias.\nkeeperByAlias, err := secrets.OpenKeeper(ctx,\n\t\"awskms://alias/ExampleAlias?region=us-east-1\")\nif err != nil {\n\treturn err\n}\ndefer keeperByAlias.Close()\n\n// 3. By ARN.\nconst arn = \"arn:aws:kms:us-east-1:111122223333:key/\" +\n\t\"1234abcd-12ab-34bc-56ef-1234567890ab\"\nkeeperByARN, err := secrets.OpenKeeper(ctx,\n\t\"awskms://\"+arn+\"?region=us-east-1\")\nif err != nil {\n\treturn err\n}\ndefer keeperByARN.Close()\n\n// Use \"awssdk=v1\" or \"v2\" to force a specific AWS SDK version.\nkeeperUsingV2, err := secrets.OpenKeeper(ctx,\n\t\"awskms://1234abcd-12ab-34cd-56ef-1234567890ab?region=us-east-1\u0026awssdk=v2\")\nif err != nil {\n\treturn err\n}\ndefer keeperUsingV2.Close()"
+		"code": "// Use one of the following:\n\n// 1. By ID.\nkeeperByID, err := secrets.OpenKeeper(ctx,\n\t\"awskms://1234abcd-12ab-34cd-56ef-1234567890ab?region=us-east-1\")\nif err != nil {\n\treturn err\n}\ndefer keeperByID.Close()\n\n// 2. By alias.\nkeeperByAlias, err := secrets.OpenKeeper(ctx,\n\t\"awskms://alias/ExampleAlias?region=us-east-1\")\nif err != nil {\n\treturn err\n}\ndefer keeperByAlias.Close()\n\n// 3. By ARN. Note that ARN may contain \":\" characters, which cannot be escaped\n// in the Host part of a URL, so the \"awskms:///\u003cARN\u003e\" form should be used.\nconst arn = \"arn:aws:kms:us-east-1:111122223333:key/\" +\n\t\"1234abcd-12ab-34bc-56ef-1234567890ab\"\nkeeperByARN, err := secrets.OpenKeeper(ctx,\n\t\"awskms:///\"+arn+\"?region=us-east-1\")\nif err != nil {\n\treturn err\n}\ndefer keeperByARN.Close()\n\n// Use \"awssdk=v1\" or \"v2\" to force a specific AWS SDK version.\nkeeperUsingV2, err := secrets.OpenKeeper(ctx,\n\t\"awskms://1234abcd-12ab-34cd-56ef-1234567890ab?region=us-east-1\u0026awssdk=v2\")\nif err != nil {\n\treturn err\n}\ndefer keeperUsingV2.Close()"
 	},
 	"gocloud.dev/secrets/azurekeyvault.ExampleOpenKeeper": {
 		"imports": "import \"gocloud.dev/secrets/azurekeyvault\"",
-		"code": "// Get a client to use with the Azure KeyVault API, using default\n// authorization from the environment.\n//\n// You can alternatively use DialUsingCLIAuth to use auth from the\n// \"az\" CLI.\nclient, err := azurekeyvault.Dial()\nif err != nil {\n\treturn err\n}\n\n// Construct a *secrets.Keeper.\nkeeper, err := azurekeyvault.OpenKeeper(client, \"https://mykeyvaultname.vault.azure.net/keys/mykeyname\", nil)\nif err != nil {\n\treturn err\n}\ndefer keeper.Close()"
+		"code": "// Makes a client to use with the Azure KeyVault API, using default\n// authorization from the environment.\nclientMaker := azurekeyvault.DefaultClientMaker\n\n// Construct a *secrets.Keeper.\nkeeper, err := azurekeyvault.OpenKeeper(clientMaker, \"https://mykeyvaultname.vault.azure.net/keys/mykeyname\", nil)\nif err != nil {\n\treturn err\n}\ndefer keeper.Close()"
 	},
 	"gocloud.dev/secrets/azurekeyvault.Example_openFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/secrets\"\n\t_ \"gocloud.dev/secrets/azurekeyvault\"\n)",
@@ -413,17 +449,17 @@
 	},
 	"gocloud.dev/secrets/localsecrets.Example_openFromURL": {
 		"imports": "import (\n\t\"context\"\n\n\t\"gocloud.dev/secrets\"\n\t_ \"gocloud.dev/secrets/localsecrets\"\n)",
-		"code": "// Using \"base64key://\", a new random key will be generated.\nrandomKeyKeeper, err := secrets.OpenKeeper(ctx, \"base64key://\")\nif err != nil {\n\treturn err\n}\ndefer randomKeyKeeper.Close()\n\n// Otherwise, the URL hostname must be a base64-encoded key, of length 32 bytes when decoded.\nsavedKeyKeeper, err := secrets.OpenKeeper(ctx, \"base64key://smGbjm71Nxd1Ig5FS0wj9SlbzAIrnolCz9bQQ6uAhl4=\")\nif err != nil {\n\treturn err\n}\ndefer savedKeyKeeper.Close()"
+		"code": "// Using \"base64key://\", a new random key will be generated.\nrandomKeyKeeper, err := secrets.OpenKeeper(ctx, \"base64key://\")\nif err != nil {\n\treturn err\n}\ndefer randomKeyKeeper.Close()\n\n// Otherwise, the URL hostname must be a base64-encoded key, of length 32 bytes when decoded.\n// Note that base64.URLEncode should be used, to avoid URL-unsafe characters.\nsavedKeyKeeper, err := secrets.OpenKeeper(ctx, \"base64key://smGbjm71Nxd1Ig5FS0wj9SlbzAIrnolCz9bQQ6uAhl4=\")\nif err != nil {\n\treturn err\n}\ndefer savedKeyKeeper.Close()"
 	},
-	"gocloud.dev/server.ExampleServer_HealthChecks": {
-		"imports": "import (\n\t\"fmt\"\n\t\"net/http\"\n\t\"time\"\n\n\t\"gocloud.dev/server\"\n\t\"gocloud.dev/server/health\"\n)",
-		"code": "// Create a health.Checker from the type we defined for our application.\n// In this example, healthCheck will report the server is unhealthy for 10 seconds\n// after startup, and as healthy henceforth. Check the /healthz/readiness\n// HTTP path to see readiness.\nhealthCheck := new(customHealthCheck)\ntime.AfterFunc(10*time.Second, func() {\n\thealthCheck.mu.Lock()\n\tdefer healthCheck.mu.Unlock()\n\thealthCheck.healthy = true\n})\n\n// The server.Options struct takes a slice of health checks, because you\n// may need to check several things.\nsrvOptions := \u0026server.Options{\n\tHealthChecks: []health.Checker{healthCheck},\n}\n\n// Pass the options to the Server constructor.\nsrv := server.New(http.DefaultServeMux, srvOptions)\n\n// Register a route.\nhttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintln(w, \"Hello, World!\")\n})\n\n// Start the server. You will see requests logged to STDOUT.\nif err := srv.ListenAndServe(\":8080\"); err != nil {\n\tlog.Fatalf(\"%v\", err)\n}"
-	},
-	"gocloud.dev/server.ExampleServer_New": {
+	"gocloud.dev/server.ExampleServer": {
 		"imports": "import (\n\t\"fmt\"\n\t\"net/http\"\n\n\t\"gocloud.dev/server\"\n)",
 		"code": "// Use the constructor function to create the server.\nsrv := server.New(http.DefaultServeMux, nil)\n\n// Register a route.\nhttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintln(w, \"Hello, World!\")\n})\n\n// Start the server. If ListenAndServe returns an error, print it and exit.\nif err := srv.ListenAndServe(\":8080\"); err != nil {\n\tlog.Fatalf(\"%v\", err)\n}"
 	},
-	"gocloud.dev/server.ExampleServer_RequestLogger": {
+	"gocloud.dev/server.ExampleServer_withHealthChecks": {
+		"imports": "import (\n\t\"fmt\"\n\t\"net/http\"\n\t\"time\"\n\n\t\"gocloud.dev/server\"\n\t\"gocloud.dev/server/health\"\n)",
+		"code": "// Create a health.Checker from the type we defined for our application.\n// In this example, healthCheck will report the server is unhealthy for 10 seconds\n// after startup, and as healthy henceforth. Check the /healthz/readiness\n// HTTP path to see readiness.\nhealthCheck := new(customHealthCheck)\ntime.AfterFunc(10*time.Second, func() {\n\thealthCheck.mu.Lock()\n\tdefer healthCheck.mu.Unlock()\n\thealthCheck.healthy = true\n})\n\n// The server.Options struct takes a slice of health checks, because you\n// may need to check several things.\nsrvOptions := \u0026server.Options{\n\tHealthChecks: []health.Checker{healthCheck},\n}\n\n// Pass the options to the Server constructor.\nsrv := server.New(http.DefaultServeMux, srvOptions)\n\n// Register a route.\nhttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintln(w, \"Hello, World!\")\n})\n\n// Start the server. You will see requests logged to STDOUT.\nif err := srv.ListenAndServe(\":8080\"); err != nil {\n\tlog.Fatalf(\"%v\", err)\n}"
+	},
+	"gocloud.dev/server.ExampleServer_withRequestLogger": {
 		"imports": "import (\n\t\"fmt\"\n\t\"net/http\"\n\t\"os\"\n\n\t\"gocloud.dev/server\"\n\t\"gocloud.dev/server/requestlog\"\n)",
 		"code": "// Create a logger, and assign it to the RequestLogger field of a\n// server.Options struct.\nsrvOptions := \u0026server.Options{\n\tRequestLogger: requestlog.NewNCSALogger(os.Stdout, func(error) {}),\n}\n\n// Pass the options to the Server constructor.\nsrv := server.New(http.DefaultServeMux, srvOptions)\n\n// Register a route.\nhttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintln(w, \"Hello, World!\")\n})\n\n// Start the server. You will see requests logged to STDOUT.\nif err := srv.ListenAndServe(\":8080\"); err != nil {\n\tlog.Fatalf(\"%v\", err)\n}"
 	}

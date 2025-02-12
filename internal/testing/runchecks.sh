@@ -44,7 +44,7 @@ rootdir="$(pwd)"
 # new Go version. Some checks below we only run
 # for the latest Go version.
 latest_go_version=0
-if [[ $(go version) == *go1\.17* ]]; then
+if [[ $(go version) == *go1\.24* ]]; then
   latest_go_version=1
 fi
 
@@ -69,16 +69,15 @@ while read -r path || [[ -n "$path" ]]; do
   gotestflags=("-json" "-race")
   testsummaryflags=("-progress")
 
-  # Only do coverage for the Linux build because it is slow, and
-  # codecov will only save the last one anyway.
-  if [[ "${RUNNER_OS:-}" == "Linux" ]]; then
-    gotestflags+=("-coverpkg=./..." "-coverprofile=$rootdir/modcoverage.out")
-  fi
-
-  # Previous versions of the "go" command may have
-  # different opinions about what go.mod should look
-  # like.
   if [[ $latest_go_version -eq 1 ]]; then
+    # Only do coverage for the latest Linux build because it is slow, and
+    # codecov will only save the last one anyway.
+    if [[ "${RUNNER_OS:-}" == "Linux" ]]; then
+      gotestflags+=("-coverpkg=./..." "-coverprofile=$rootdir/modcoverage.out")
+    fi
+    # Previous versions of the "go" command may have
+    # different opinions about what go.mod should look
+    # like.
     gotestflags+=("-mod=readonly")
   fi
 
@@ -186,15 +185,6 @@ if [[ ${latest_go_version} -eq 1 ]]; then
     result=1
   }
 fi;
-
-
-# For pull requests, check if there are undeclared incompatible API changes.
-# Skip this if we're already going to fail since it is expensive.
-# CURRENTLY BROKEN
-# if [[ ${latest_go_version} -eq 1 ]] && [[ ${result} -eq 0 ]] && [[ ! -z "${GITHUB_HEAD_REF:-}" ]]; then
-  # echo
-  # ./internal/testing/check_api_change.sh || result=1;
-# fi
 
 
 echo

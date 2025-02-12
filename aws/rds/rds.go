@@ -21,7 +21,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/google/wire"
@@ -41,7 +40,7 @@ type CertPoolProvider interface {
 }
 
 // caBundleURL is the URL to the public RDS Certificate Authority keys.
-const caBundleURL = "https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem"
+const caBundleURL = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem"
 
 // CertFetcher pulls the RDS CA certificates from Amazon's servers. The zero
 // value will fetch certificates using the default HTTP client.
@@ -79,7 +78,7 @@ func (cf *CertFetcher) Fetch(ctx context.Context) ([]*x509.Certificate, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch RDS certificates: HTTP %s", resp.Status)
 	}
-	pemData, err := ioutil.ReadAll(&io.LimitedReader{R: resp.Body, N: 1 << 20}) // limit to 1MiB
+	pemData, err := io.ReadAll(&io.LimitedReader{R: resp.Body, N: 1 << 20}) // limit to 1MiB
 	if err != nil {
 		return nil, fmt.Errorf("fetch RDS certificates: %v", err)
 	}

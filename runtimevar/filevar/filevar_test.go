@@ -17,7 +17,6 @@ package filevar
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -39,10 +38,10 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) (drivertest.Harness, error) {
-	dir, err := ioutil.TempDir("", "filevar_test-")
-	if err != nil {
-		return nil, err
-	}
+	t.Helper()
+
+	dir := t.TempDir()
+
 	return &harness{
 		dir:    dir,
 		closer: func() { _ = os.RemoveAll(dir) },
@@ -58,7 +57,7 @@ func (h *harness) MakeWatcher(ctx context.Context, name string, decoder *runtime
 func (h *harness) CreateVariable(ctx context.Context, name string, val []byte) error {
 	// Write to a temporary file and rename; otherwise,
 	// Watch can read an empty file during the write.
-	tmp, err := ioutil.TempFile(h.dir, "tmp")
+	tmp, err := os.CreateTemp(h.dir, "tmp")
 	if err != nil {
 		return err
 	}
@@ -114,10 +113,7 @@ func (verifyAs) ErrorCheck(v *runtimevar.Variable, err error) error {
 // Filevar-specific tests.
 
 func TestOpenVariable(t *testing.T) {
-	dir, err := ioutil.TempDir("", "filevar_test-")
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 
 	tests := []struct {
 		description string
@@ -177,18 +173,14 @@ func TestOpenVariable(t *testing.T) {
 }
 
 func TestOpenVariableURL(t *testing.T) {
-	dir, err := ioutil.TempDir("", "gcdk-filevar-example")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	jsonPath := filepath.Join(dir, "myvar.json")
-	if err := ioutil.WriteFile(jsonPath, []byte(`{"Foo": "Bar"}`), 0666); err != nil {
+	if err := os.WriteFile(jsonPath, []byte(`{"Foo": "Bar"}`), 0o666); err != nil {
 		t.Fatal(err)
 	}
 	txtPath := filepath.Join(dir, "myvar.txt")
-	if err := ioutil.WriteFile(txtPath, []byte("hello world!"), 0666); err != nil {
+	if err := os.WriteFile(txtPath, []byte("hello world!"), 0o666); err != nil {
 		t.Fatal(err)
 	}
 	nonexistentPath := filepath.Join(dir, "filenotfound")
@@ -225,7 +217,7 @@ func TestOpenVariableURL(t *testing.T) {
 		URL          string
 		WantErr      bool
 		WantWatchErr bool
-		Want         interface{}
+		Want         any
 	}{
 		// Variable construction succeeds, but the file does not exist.
 		{"file://" + nonexistentPath, false, true, nil},
@@ -238,15 +230,19 @@ func TestOpenVariableURL(t *testing.T) {
 		// Working example with string decoder.
 		{"file://" + txtPath + "?decoder=string", false, false, "hello world!"},
 		// Working example with JSON decoder.
-		{"file://" + jsonPath + "?decoder=jsonmap", false, false, &map[string]interface{}{"Foo": "Bar"}},
+		{"file://" + jsonPath + "?decoder=jsonmap", false, false, &map[string]any{"Foo": "Bar"}},
 		// Working example with decrypt (default) decoder.
 		{"file://" + secretsPath + "?decoder=decrypt", false, false, []byte(`{"Foo":"Bar"}`)},
 		// Working example with decrypt+bytes decoder.
 		{"file://" + secretsPath + "?decoder=decrypt+bytes", false, false, []byte(`{"Foo":"Bar"}`)},
 		// Working example with decrypt+json decoder.
-		{"file://" + secretsPath + "?decoder=decrypt+jsonmap", false, false, &map[string]interface{}{"Foo": "Bar"}},
+		{"file://" + secretsPath + "?decoder=decrypt+jsonmap", false, false, &map[string]any{"Foo": "Bar"}},
 		// Working example with escaped decrypt+json decoder
-		{"file://" + secretsPath + "?decoder=" + url.QueryEscape("decrypt+jsonmap"), false, false, &map[string]interface{}{"Foo": "Bar"}},
+		{"file://" + secretsPath + "?decoder=" + url.QueryEscape("decrypt+jsonmap"), false, false, &map[string]any{"Foo": "Bar"}},
+		// Setting wait.
+		{"file://" + txtPath + "?decoder=string&wait=1m", false, false, "hello world!"},
+		// Invalid wait.
+		{"file://" + txtPath + "?decoder=string&wait=xx", true, false, nil},
 	}
 
 	for _, test := range tests {
@@ -288,7 +284,7 @@ func setupTestSecrets(ctx context.Context, dir, secretsPath string) (func(), err
 	if err != nil {
 		return cleanup, err
 	}
-	if err := ioutil.WriteFile(secretsPath, sc, 0666); err != nil {
+	if err := os.WriteFile(secretsPath, sc, 0o666); err != nil {
 		return cleanup, err
 	}
 	return cleanup, nil

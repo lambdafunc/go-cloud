@@ -16,6 +16,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -24,7 +25,6 @@ import (
 
 	"gocloud.dev/pubsub/driver"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/xerrors"
 )
 
 const (
@@ -159,6 +159,13 @@ func TestReceivePerformance(t *testing.T) {
 				return d
 			},
 		},
+		{
+			description: "intermittent",
+			receiveProfile: func(_ bool, maxMessages int) (int, time.Duration) {
+				n := rand.Int() % 2
+				return n, 250 * time.Millisecond
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -178,6 +185,8 @@ func TestReceivePerformance(t *testing.T) {
 }
 
 func runBenchmark(t *testing.T, description string, numGoRoutines int, receiveProfile func(bool, int) (int, time.Duration), processProfile func(bool) time.Duration) {
+	t.Helper()
+
 	msgs := make([]*driver.Message, maxBatchSize)
 	for i := range msgs {
 		msgs[i] = &driver.Message{}
@@ -274,7 +283,7 @@ func runBenchmark(t *testing.T, description string, numGoRoutines int, receivePr
 			// Each goroutine loops until ctx is canceled.
 			for {
 				m, err := sub.Receive(ctx)
-				if xerrors.Is(err, context.DeadlineExceeded) {
+				if errors.Is(err, context.DeadlineExceeded) {
 					return nil
 				}
 				if err != nil {

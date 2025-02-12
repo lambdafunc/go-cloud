@@ -15,7 +15,7 @@
 // Package etcdvar provides a runtimevar implementation with variables
 // backed by etcd. Use OpenVariable to construct a *runtimevar.Variable.
 //
-// URLs
+// # URLs
 //
 // For runtimevar.OpenVariable, etcdvar registers for the scheme "etcd".
 // The default URL opener will dial an etcd server based on the environment
@@ -24,11 +24,11 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // etcdvar exposes the following types for As:
-//  - Snapshot: *clientv3.GetResponse
-//  - Error: rpctypes.EtcdError
+//   - Snapshot: *clientv3.GetResponse
+//   - Error: rpctypes.EtcdError
 package etcdvar // import "gocloud.dev/runtimevar/etcdvar"
 
 import (
@@ -41,7 +41,7 @@ import (
 	"sync"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"gocloud.dev/gcerrors"
 	"gocloud.dev/runtimevar"
@@ -88,7 +88,7 @@ func (o *defaultDialer) OpenVariableURL(ctx context.Context, u *url.URL) (*runti
 //
 // The following URL parameters are supported:
 //   - decoder: The decoder to use. Defaults to runtimevar.BytesDecoder.
-//       See runtimevar.DecoderByName for supported values.
+//     See runtimevar.DecoderByName for supported values.
 type URLOpener struct {
 	// The Client to use; required.
 	Client *clientv3.Client
@@ -155,7 +155,7 @@ var errNotExist = errors.New("variable does not exist")
 
 // state implements driver.State.
 type state struct {
-	val        interface{}
+	val        any
 	raw        *clientv3.GetResponse
 	updateTime time.Time
 	version    int64
@@ -163,7 +163,7 @@ type state struct {
 }
 
 // Value implements driver.State.Value.
-func (s *state) Value() (interface{}, error) {
+func (s *state) Value() (any, error) {
 	return s.val, s.err
 }
 
@@ -173,7 +173,7 @@ func (s *state) UpdateTime() time.Time {
 }
 
 // As implements driver.State.As.
-func (s *state) As(i interface{}) bool {
+func (s *state) As(i any) bool {
 	if s.raw == nil {
 		return false
 	}
@@ -305,7 +305,7 @@ func (w *watcher) Close() error {
 }
 
 // ErrorAs implements driver.ErrorAs.
-func (w *watcher) ErrorAs(err error, i interface{}) bool {
+func (w *watcher) ErrorAs(err error, i any) bool {
 	switch v := err.(type) {
 	case rpctypes.EtcdError:
 		if p, ok := i.(*rpctypes.EtcdError); ok {

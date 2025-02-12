@@ -14,70 +14,110 @@
 
 module gocloud.dev
 
-go 1.12
+go 1.21.0
 
 require (
-	cloud.google.com/go v0.94.0
-	cloud.google.com/go/firestore v1.5.0
-	cloud.google.com/go/kms v0.1.0
-	cloud.google.com/go/monitoring v0.1.0 // indirect
-	cloud.google.com/go/pubsub v1.16.0
-	cloud.google.com/go/secretmanager v0.1.0
-	cloud.google.com/go/storage v1.16.1
-	cloud.google.com/go/trace v0.1.0 // indirect
-	contrib.go.opencensus.io/exporter/aws v0.0.0-20200617204711-c478e41e60e9
-	contrib.go.opencensus.io/exporter/stackdriver v0.13.8
+	cloud.google.com/go/compute/metadata v0.5.0
+	cloud.google.com/go/firestore v1.16.0
+	cloud.google.com/go/iam v1.1.13
+	cloud.google.com/go/kms v1.18.5
+	cloud.google.com/go/pubsub v1.41.0
+	cloud.google.com/go/secretmanager v1.13.6
+	cloud.google.com/go/storage v1.43.0
+	contrib.go.opencensus.io/exporter/aws v0.0.0-20230502192102-15967c811cec
+	contrib.go.opencensus.io/exporter/stackdriver v0.13.14
 	contrib.go.opencensus.io/integrations/ocsql v0.1.7
-	github.com/Azure/azure-amqp-common-go/v3 v3.1.1
-	github.com/Azure/azure-pipeline-go v0.2.3
-	github.com/Azure/azure-sdk-for-go v57.0.0+incompatible
-	github.com/Azure/azure-service-bus-go v0.10.16
-	github.com/Azure/azure-storage-blob-go v0.14.0
-	github.com/Azure/go-amqp v0.13.12
-	github.com/Azure/go-autorest/autorest v0.11.20
-	github.com/Azure/go-autorest/autorest/adal v0.9.15
-	github.com/Azure/go-autorest/autorest/azure/auth v0.5.8
-	github.com/Azure/go-autorest/autorest/azure/cli v0.4.3 // indirect
-	github.com/GoogleCloudPlatform/cloudsql-proxy v1.24.0
-	github.com/aws/aws-sdk-go v1.40.34
-	github.com/aws/aws-sdk-go-v2 v1.9.2
-	github.com/aws/aws-sdk-go-v2/config v1.7.0
-	github.com/aws/aws-sdk-go-v2/credentials v1.4.0
-	github.com/aws/aws-sdk-go-v2/service/kms v1.5.0
-	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.6.0
-	github.com/aws/aws-sdk-go-v2/service/sns v1.8.2
-	github.com/aws/aws-sdk-go-v2/service/sqs v1.9.2
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.10.0
-	github.com/aws/smithy-go v1.8.0
-	github.com/fsnotify/fsnotify v1.5.1
-	github.com/go-sql-driver/mysql v1.6.0
+	github.com/Azure/azure-amqp-common-go/v3 v3.2.3
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.14.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.10.0
+	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.7.1
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
+	github.com/Azure/go-amqp v1.0.5
+	github.com/Azure/go-autorest/autorest/to v0.4.0
+	github.com/GoogleCloudPlatform/cloudsql-proxy v1.36.0
+	github.com/aws/aws-sdk-go v1.55.5
+	github.com/aws/aws-sdk-go-v2 v1.30.3
+	github.com/aws/aws-sdk-go-v2/config v1.27.27
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.27
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.10
+	github.com/aws/aws-sdk-go-v2/service/kms v1.35.3
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.58.3
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.32.4
+	github.com/aws/aws-sdk-go-v2/service/sns v1.31.3
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.34.3
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.52.4
+	github.com/aws/smithy-go v1.20.3
+	github.com/fsnotify/fsnotify v1.7.0
+	github.com/go-sql-driver/mysql v1.8.1
+	github.com/google/go-cmp v0.6.0
+	github.com/google/go-replayers/grpcreplay v1.3.0
+	github.com/google/go-replayers/httpreplay v1.2.0
+	github.com/google/uuid v1.6.0
+	github.com/google/wire v0.6.0
+	github.com/googleapis/gax-go/v2 v2.13.0
+	github.com/lib/pq v1.10.9
+	go.opencensus.io v0.24.0
+	golang.org/x/crypto v0.26.0
+	golang.org/x/net v0.28.0
+	golang.org/x/oauth2 v0.22.0
+	golang.org/x/sync v0.8.0
+	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9
+	google.golang.org/api v0.191.0
+	google.golang.org/genproto v0.0.0-20240812133136-8ffd90a71988
+	google.golang.org/grpc v1.65.0
+	google.golang.org/protobuf v1.34.2
+)
+
+require (
+	cloud.google.com/go v0.115.0 // indirect
+	cloud.google.com/go/auth v0.8.1 // indirect
+	cloud.google.com/go/auth/oauth2adapt v0.2.4 // indirect
+	cloud.google.com/go/longrunning v0.5.12 // indirect
+	cloud.google.com/go/monitoring v1.20.4 // indirect
+	cloud.google.com/go/trace v1.10.12 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.1 // indirect
+	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.3 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.11 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.15 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.15 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.17 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.17 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.15 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.22.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.26.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.30.3 // indirect
+	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
+	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.2
-	github.com/google/go-cmp v0.5.6
-	github.com/google/go-replayers/grpcreplay v1.1.0
-	github.com/google/go-replayers/httpreplay v1.0.0
-	github.com/google/martian v2.1.1-0.20190517191504-25dcb96d9e51+incompatible // indirect
-	github.com/google/uuid v1.3.0
-	github.com/google/wire v0.5.0
-	github.com/googleapis/gax-go/v2 v2.1.0
-	github.com/klauspost/compress v1.13.5 // indirect
-	github.com/lib/pq v1.10.2
-	github.com/mitchellh/mapstructure v1.4.1 // indirect
-	github.com/stretchr/objx v0.2.0 // indirect
-	go.opencensus.io v0.23.0
-	go.uber.org/atomic v1.9.0 // indirect
-	go.uber.org/multierr v1.7.0 // indirect
-	go.uber.org/zap v1.19.0 // indirect
-	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
-	golang.org/x/mod v0.5.0 // indirect
-	golang.org/x/net v0.0.0-20210825183410-e898025ed96a
-	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210831042530-f4d43177bf5e // indirect
-	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
-	google.golang.org/api v0.56.0
-	google.golang.org/genproto v0.0.0-20210831024726-fe130286e0e2
-	google.golang.org/grpc v1.40.0
-	nhooyr.io/websocket v1.8.7 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/google/martian/v3 v3.3.3 // indirect
+	github.com/google/s2a-go v0.1.8 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
+	github.com/prometheus/prometheus v0.54.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0 // indirect
+	go.opentelemetry.io/otel v1.28.0 // indirect
+	go.opentelemetry.io/otel/metric v1.28.0 // indirect
+	go.opentelemetry.io/otel/trace v1.28.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	go.uber.org/zap v1.27.0 // indirect
+	golang.org/x/sys v0.24.0 // indirect
+	golang.org/x/text v0.17.0 // indirect
+	golang.org/x/time v0.6.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240812133136-8ffd90a71988 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240812133136-8ffd90a71988 // indirect
 )

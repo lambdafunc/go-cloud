@@ -1,8 +1,10 @@
 {
-  "Initial": "AQAAAA7Yp6hWNKnm//5c",
+  "Initial": "AQAAAA7eRgWUHA8D0AAA",
   "Version": "0.2",
   "Converter": {
-    "ScrubBody": null,
+    "ScrubBody": [
+      "MessageAttributes.*"
+    ],
     "ClearHeaders": [
       "^X-Goog-.*Encryption-Key$",
       "^Amz-Sdk-Invocation-Id$",
@@ -42,7 +44,7 @@
   },
   "Entries": [
     {
-      "ID": "5f1a29f163e8e88d",
+      "ID": "dff808c4e4bbd8cc",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -90,20 +92,20 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
+            "Thu, 08 Aug 2024 00:17:24 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "c943acf9-15f0-45fb-a7d6-23eb3e77d3bf"
+            "a55c9750-7090-4315-8a22-990e38475fc6"
           ]
         },
         "Body": "H4sIAAAAAAAAAKtWCslMLVKyUgouScxLSSxKUdJRCkstKs7Mz1OyMqwFAFB+6N8fAAAA"
       }
     },
     {
-      "ID": "82c0b762d6ec9571",
+      "ID": "57f593236fd9419a",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -151,81 +153,20 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
+            "Thu, 08 Aug 2024 00:17:24 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "e9ec0df2-5cbe-46ea-89c6-d02285fa34a6"
+            "6cca3b18-01a3-4fb8-989d-7fbe59b0f439"
           ]
         },
-        "Body": "H4sIAAAAAAAAAIWOTU/CQBCG/4qZcxfZFUvdGwQ9KSFIuLgehnQ0m0C3mZ0qpOl/d0A8e5t5P568PayQ8UBCDL6H2XoJHpAbj9/Z53zwXTaEWYzzk9LdVWPn7qfO+favdSukbtfWKLH5NF/IEXd7MpIMMSeGAhYouDm1pGSho6jyrMSXVMePSLW66thR6arK2nI8taV9fChgqfxL4z/8Ff0qrAn9t7jvzsJbHy6QAP4mwFNKAQo9NjrhV5ojBxjezxXiHFOjM4bhB/RlnjISAQAA"
+        "Body": "H4sIAAAAAAAAAIWOTU/CQBCG/wqZc1dxW1rcmwQ9KTFCvLAcxnQ0m5RuMzsVTdP/7gBy5jbzfjx5B3hFxj0JMbgBHt5W4AC5dXhILqW965MhTGKsK0qbz6fWziprXXdp3Qqp23c1Smi/zDdywI+GjERDzJEhgyUKbn47UrLQj6jyrMSXWIfPQLW66tzdVDafVqUtinKeP95nsFL+qXEN/49eC2tC/3ds+qOwHfwJ4sFNPDzF6CHTY6MTztIC2cO4O1aIU4itzhjHP3UAGRMSAQAA"
       }
     },
     {
-      "ID": "53f3db3e38669b76",
-      "Request": {
-        "Method": "POST",
-        "URL": "https://ssm.us-east-2.amazonaws.com/",
-        "Header": {
-          "Accept-Encoding": [
-            "gzip"
-          ],
-          "Amz-Sdk-Invocation-Id": [
-            "CLEARED"
-          ],
-          "Amz-Sdk-Request": [
-            "attempt=1; max=1"
-          ],
-          "Content-Length": [
-            "73"
-          ],
-          "User-Agent": [
-            "CLEARED"
-          ],
-          "X-Amz-Date": [
-            "CLEARED"
-          ],
-          "X-Amz-Target": [
-            "AmazonSSM.DescribeParameters"
-          ]
-        },
-        "MediaType": "application/x-amz-json-1.1",
-        "BodyParts": [
-          "eyJGaWx0ZXJzIjpbeyJLZXkiOiJOYW1lIiwiVmFsdWVzIjpbInRlc3QtdXBkYXRpbmctdmFyaWFibGUtdG8tZXJyb3IiXX1dfQ=="
-        ]
-      },
-      "Response": {
-        "StatusCode": 200,
-        "Proto": "HTTP/1.1",
-        "ProtoMajor": 1,
-        "ProtoMinor": 1,
-        "Header": {
-          "Content-Encoding": [
-            "gzip"
-          ],
-          "Content-Length": [
-            "194"
-          ],
-          "Content-Type": [
-            "application/x-amz-json-1.1"
-          ],
-          "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
-          ],
-          "Server": [
-            "Server"
-          ],
-          "X-Amzn-Requestid": [
-            "6ac1a0a1-9754-4d0e-b9cc-496875bd6dec"
-          ]
-        },
-        "Body": "H4sIAAAAAAAAAFWPTQ8BQQyG/8ucLWaw1py5IRLLRRzKlDSxM9Kpr4j/rsTFsXnf9nn6NAtgaFCQs/GbpxmDQP04o/FG8C6mZaaQZZYCHQiDpprYdumqytqyO7SlnYz+O6uMrNvA0cMte4LG+37pelXXucHQOX/RQoevEI8YP4C58r+4LMXlHEAoHosrMMHuhIWkApkTa3GRTrQn/IhuW6amL2cpEANw0PznvRTWCzqv9SlKUYVf29cbmJa7fuoAAAA="
-      }
-    },
-    {
-      "ID": "098f124380756b45",
+      "ID": "a37fc6addc94f0a2",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -273,20 +214,20 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
+            "Thu, 08 Aug 2024 00:17:24 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "956d8b2a-503a-459c-b746-0c3117602034"
+            "292eee35-bd5c-4b9a-b720-e52d7de2c82a"
           ]
         },
         "Body": "H4sIAAAAAAAAAKtWCslMLVKyUgouScxLSSxKUdJRCkstKs7Mz1OyMqoFAJMtxfQfAAAA"
       }
     },
     {
-      "ID": "a4aa971653b11f70",
+      "ID": "c946e888206e5444",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -328,87 +269,26 @@
             "gzip"
           ],
           "Content-Length": [
-            "188"
+            "187"
           ],
           "Content-Type": [
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
+            "Thu, 08 Aug 2024 00:17:24 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "442401e7-4226-487e-a1b1-012102c9a690"
+            "1053cdce-46d1-438e-ae6b-e6bf0bcfa647"
           ]
         },
-        "Body": "H4sIAAAAAAAAAIWMyw6CQAxF/2XWjMKIgLMz0Z0So8Z9DdWMAYZ0io8Y/91idO2uvefe81QbIGiQkZR9qvm2VFYBtRZuwYbQ2D5ohMDa2DQzkyI2ZpobY7vfaswotO8qYNee9RXIwbFGzV4jkScVqQUw7B8dipnxzpKsxLj2lTs5rIQKSUaZKYokyeI8nebLWaRK8X8W//Rf9Y5JGvIfoO6HwLVXqF2lL8G3Q4wUnFzWvF5vK0JcF/YAAAA="
+        "Body": "H4sIAAAAAAAAAIWMTQ/BQBCG/8ueLTVWy94k3BBB3Ec6ZKXaZnbqI9L/biqc3Wbe532fl9kg45WE2PiXmW3Xxhvk0uM9+hivvomWMIoF71IYTRKAcQbg699qIKS0qXOUUJ7tDTngsSArlSXmik3PzFFw/6xJzUIP0WSpxlWVh1OgXKmSYT+DUZKl4NzEucW0Z9bq/yz+6b/qnbA29D9g0XRBKG9YhNxeYlV2MXEMenlo2zd/l6wO9gAAAA=="
       }
     },
     {
-      "ID": "3420081d049176c5",
-      "Request": {
-        "Method": "POST",
-        "URL": "https://ssm.us-east-2.amazonaws.com/",
-        "Header": {
-          "Accept-Encoding": [
-            "gzip"
-          ],
-          "Amz-Sdk-Invocation-Id": [
-            "CLEARED"
-          ],
-          "Amz-Sdk-Request": [
-            "attempt=1; max=1"
-          ],
-          "Content-Length": [
-            "73"
-          ],
-          "User-Agent": [
-            "CLEARED"
-          ],
-          "X-Amz-Date": [
-            "CLEARED"
-          ],
-          "X-Amz-Target": [
-            "AmazonSSM.DescribeParameters"
-          ]
-        },
-        "MediaType": "application/x-amz-json-1.1",
-        "BodyParts": [
-          "eyJGaWx0ZXJzIjpbeyJLZXkiOiJOYW1lIiwiVmFsdWVzIjpbInRlc3QtdXBkYXRpbmctdmFyaWFibGUtdG8tZXJyb3IiXX1dfQ=="
-        ]
-      },
-      "Response": {
-        "StatusCode": 200,
-        "Proto": "HTTP/1.1",
-        "ProtoMajor": 1,
-        "ProtoMinor": 1,
-        "Header": {
-          "Content-Encoding": [
-            "gzip"
-          ],
-          "Content-Length": [
-            "194"
-          ],
-          "Content-Type": [
-            "application/x-amz-json-1.1"
-          ],
-          "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
-          ],
-          "Server": [
-            "Server"
-          ],
-          "X-Amzn-Requestid": [
-            "94ccd77c-b0e7-4732-bb0b-b5ed1f722e38"
-          ]
-        },
-        "Body": "H4sIAAAAAAAAAFWPTQ8BQQyG/8ucLWaw1py5IRLLRRzKlDSxM9Kpr4j/rsTFsXnf9nn6NAtgaFCQs/GbpxmDQP04o/FG8C6mZaaQZZYCHQiDpprYdumqytqyO7SlnYz+O6uMrNvA0cMte4LG+37pelXXucHQOX/RQoevEI8YP4C58r+4LMXlHEAoHosrMMHuhIWkApkTa3GRTrQn/IhuW6amL2cpEANw0PznvRTWCzqv9SlKUYVf29cbmJa7fuoAAAA="
-      }
-    },
-    {
-      "ID": "9f0445e9ea4c0c13",
+      "ID": "5d5dad61cb4f981e",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -456,20 +336,20 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
+            "Thu, 08 Aug 2024 00:17:25 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "e051417f-9bf3-40b4-a3e6-481219711554"
+            "6b9814c2-0613-44a2-bf25-125069b483d9"
           ]
         },
         "Body": "H4sIAAAAAAAAAKtWCslMLVKyUgouScxLSSxKUdJRCkstKs7Mz1OyMq4FANIc3u0fAAAA"
       }
     },
     {
-      "ID": "4bdbee36b18f8927",
+      "ID": "d20ec5249e437fb8",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -511,87 +391,26 @@
             "gzip"
           ],
           "Content-Length": [
-            "191"
+            "190"
           ],
           "Content-Type": [
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
+            "Thu, 08 Aug 2024 00:17:25 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "dc261bb0-1b37-452e-be35-1fe4009606eb"
+            "156292aa-fba5-4bdf-90f6-8828895364cf"
           ]
         },
-        "Body": "H4sIAAAAAAAAAIWMzW7CQAwG38XnLJCF/LA3JLhBhErF3ShutSjZjbwObYV4d0wFZ46e8TdX2CNjT0IM7gqrjwYcIAeHP8ml1LsxGcIkxrpFaef1zNqistYNr9VUSO04tCg+fJsLssdTR0aiIebIkMEaBT//BtKy0K8o2WpxF1v/5alVqyaflLau87ycVVVRbJYZNNr/X7zLP9MHYf3Q+4jd+AA+XLDzrTmnGOyDEycfA7j57XYHUUlAZPcAAAA="
+        "Body": "H4sIAAAAAAAAAIWMzW7CQAwG38VnlgYnENgbEtxaVEHF3Sim2irsRl6HHyHeHVPBmaNn/M0VvknowMoC/grz9Qo8kERPp+xzPvg+O6asDn01wXJaII5rRN+9Vh/KZvuuIQ3x1x1JAu1adpociySBASxI6efSsZWVz2rk04pfqQn7wI1ZM6NhjWVRT7AaF0W1nA1gZf3/xbv8M71RsQ+7t9T2DxDikdrQuL+cIj44Sw4pgi9vtzu/DtW09wAAAA=="
       }
     },
     {
-      "ID": "a53789cf61268e39",
-      "Request": {
-        "Method": "POST",
-        "URL": "https://ssm.us-east-2.amazonaws.com/",
-        "Header": {
-          "Accept-Encoding": [
-            "gzip"
-          ],
-          "Amz-Sdk-Invocation-Id": [
-            "CLEARED"
-          ],
-          "Amz-Sdk-Request": [
-            "attempt=1; max=1"
-          ],
-          "Content-Length": [
-            "73"
-          ],
-          "User-Agent": [
-            "CLEARED"
-          ],
-          "X-Amz-Date": [
-            "CLEARED"
-          ],
-          "X-Amz-Target": [
-            "AmazonSSM.DescribeParameters"
-          ]
-        },
-        "MediaType": "application/x-amz-json-1.1",
-        "BodyParts": [
-          "eyJGaWx0ZXJzIjpbeyJLZXkiOiJOYW1lIiwiVmFsdWVzIjpbInRlc3QtdXBkYXRpbmctdmFyaWFibGUtdG8tZXJyb3IiXX1dfQ=="
-        ]
-      },
-      "Response": {
-        "StatusCode": 200,
-        "Proto": "HTTP/1.1",
-        "ProtoMajor": 1,
-        "ProtoMinor": 1,
-        "Header": {
-          "Content-Encoding": [
-            "gzip"
-          ],
-          "Content-Length": [
-            "194"
-          ],
-          "Content-Type": [
-            "application/x-amz-json-1.1"
-          ],
-          "Date": [
-            "Thu, 12 Aug 2021 23:40:07 GMT"
-          ],
-          "Server": [
-            "Server"
-          ],
-          "X-Amzn-Requestid": [
-            "c63349a0-2309-401a-b136-f0c98441c642"
-          ]
-        },
-        "Body": "H4sIAAAAAAAAAFWPTQ8BQQyG/8ucLWaw1py5IRLLRRzKlDSxM9Kpr4j/rsTFsXnf9nn6NAtgaFCQs/GbpxmDQP04o/FG8C6mZaaQZZYCHQiDpprYdumqytqyO7SlnYz+O6uMrNvA0cMte4LG+37pelXXucHQOX/RQoevEI8YP4C58r+4LMXlHEAoHosrMMHuhIWkApkTa3GRTrQn/IhuW6amL2cpEANw0PznvRTWCzqv9SlKUYVf29cbmJa7fuoAAAA="
-      }
-    },
-    {
-      "ID": "44118d2aadedf377",
+      "ID": "39b7e3fbb54b64f9",
       "Request": {
         "Method": "POST",
         "URL": "https://ssm.us-east-2.amazonaws.com/",
@@ -639,13 +458,13 @@
             "application/x-amz-json-1.1"
           ],
           "Date": [
-            "Thu, 12 Aug 2021 23:40:08 GMT"
+            "Thu, 08 Aug 2024 00:17:25 GMT"
           ],
           "Server": [
             "Server"
           ],
           "X-Amzn-Requestid": [
-            "c3f8ac06-72dc-4cf8-b286-49789dd7c87f"
+            "efbf3a19-2140-47ad-acdd-20232079367f"
           ]
         },
         "Body": "H4sIAAAAAAAAAKuuBQBDv6ajAgAAAA=="

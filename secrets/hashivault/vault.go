@@ -16,7 +16,7 @@
 // Secrets Engine of Vault by Hashicorp.
 // Use OpenKeeper to construct a *secrets.Keeper.
 //
-// URLs
+// # URLs
 //
 // For secrets.OpenKeeper, hashivault registers for the scheme "hashivault".
 // The default URL opener will dial a Vault server using the environment variables
@@ -25,7 +25,7 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-// As
+// # As
 //
 // hashivault does not support any types for As.
 package hashivault
@@ -199,7 +199,7 @@ type keeper struct {
 func (k *keeper) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, error) {
 	out, err := k.client.Logical().Write(
 		path.Join(k.opts.Engine+"/decrypt", k.keyID),
-		map[string]interface{}{
+		map[string]any{
 			"ciphertext": string(ciphertext),
 		},
 	)
@@ -213,7 +213,7 @@ func (k *keeper) Decrypt(ctx context.Context, ciphertext []byte) ([]byte, error)
 func (k *keeper) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) {
 	secret, err := k.client.Logical().Write(
 		path.Join(k.opts.Engine+"/encrypt", k.keyID),
-		map[string]interface{}{
+		map[string]any{
 			"plaintext": plaintext,
 		},
 	)
@@ -227,7 +227,7 @@ func (k *keeper) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) 
 func (k *keeper) Close() error { return nil }
 
 // ErrorAs implements driver.Keeper.ErrorAs.
-func (k *keeper) ErrorAs(err error, i interface{}) bool {
+func (k *keeper) ErrorAs(err error, i any) bool {
 	return false
 }
 

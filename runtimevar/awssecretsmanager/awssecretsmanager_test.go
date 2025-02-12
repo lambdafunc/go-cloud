@@ -63,9 +63,9 @@ func waitForMutation(ctx context.Context, check func() error) error {
 	backoff := gax.Backoff{Multiplier: 1.0}
 	var initial time.Duration
 	if *setup.Record {
-		// When recording, wait 15 seconds and then poll every 5s.
-		initial = 15 * time.Second
-		backoff.Initial = 5 * time.Second
+		// When recording, wait 3 seconds and then poll every 2s.
+		initial = 3 * time.Second
+		backoff.Initial = 2 * time.Second
 	} else {
 		// During replay, we don't wait at all.
 		// The recorded file may have retries, but we don't need to actually wait between them.
@@ -77,7 +77,7 @@ func waitForMutation(ctx context.Context, check func() error) error {
 	time.Sleep(initial)
 
 	// retryIfNotFound returns true if err is NotFound.
-	var retryIfNotFound = func(err error) bool { return gcerrors.Code(err) == gcerrors.NotFound }
+	retryIfNotFound := func(err error) bool { return gcerrors.Code(err) == gcerrors.NotFound }
 
 	// Poll until the mtuation is seen.
 	return retry.Call(ctx, backoff, retryIfNotFound, check)
@@ -102,6 +102,8 @@ func generateClientRequestToken(name string, data []byte) string {
 }
 
 func newHarness(t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	sess, _, done, _ := setup.NewAWSSession(context.Background(), t, region)
 
 	return &harness{
@@ -112,6 +114,8 @@ func newHarness(t *testing.T) (drivertest.Harness, error) {
 }
 
 func newHarnessV2(t *testing.T) (drivertest.Harness, error) {
+	t.Helper()
+
 	cfg, _, done, _ := setup.NewAWSv2Config(context.Background(), t, region)
 	return &harness{
 		useV2:    true,
@@ -224,7 +228,7 @@ func (h *harness) DeleteVariable(ctx context.Context, name string) error {
 	var err error
 	if h.useV2 {
 		_, err = h.clientV2.DeleteSecret(ctx, &secretsmanagerv2.DeleteSecretInput{
-			ForceDeleteWithoutRecovery: true,
+			ForceDeleteWithoutRecovery: aws.Bool(true),
 			SecretId:                   awsv2.String(name),
 		})
 	} else {
@@ -349,13 +353,13 @@ func TestNoConnectionError(t *testing.T) {
 	prevAccessKey := os.Getenv("AWS_ACCESS_KEY")
 	prevSecretKey := os.Getenv("AWS_SECRET_KEY")
 	prevRegion := os.Getenv("AWS_REGION")
-	os.Setenv("AWS_ACCESS_KEY", "myaccesskey")
-	os.Setenv("AWS_SECRET_KEY", "mysecretkey")
-	os.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY", "myaccesskey")
+	t.Setenv("AWS_SECRET_KEY", "mysecretkey")
+	t.Setenv("AWS_REGION", "us-east-1")
 	defer func() {
-		os.Setenv("AWS_ACCESS_KEY", prevAccessKey)
-		os.Setenv("AWS_SECRET_KEY", prevSecretKey)
-		os.Setenv("AWS_REGION", prevRegion)
+		t.Setenv("AWS_ACCESS_KEY", prevAccessKey)
+		t.Setenv("AWS_SECRET_KEY", prevSecretKey)
+		t.Setenv("AWS_REGION", prevRegion)
 	}()
 	sess, err := session.NewSession()
 	if err != nil {
@@ -386,6 +390,10 @@ func TestOpenVariable(t *testing.T) {
 		{"awssecretsmanager://myvar?decoder=string", false},
 		// Invalid decoder.
 		{"awssecretsmanager://myvar?decoder=notadecoder", true},
+		// OK, setting wait.
+		{"awssecretsmanager://myvar?wait=5m", false},
+		// Invalid wait.
+		{"awssecretsmanager://myvar?wait=xx", true},
 		// Invalid parameter.
 		{"awssecretsmanager://myvar?param=value", true},
 		// OK, using SDK V2.

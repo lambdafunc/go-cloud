@@ -17,14 +17,13 @@
 // Use OpenCollection to construct a *docstore.Collection.
 //
 // Docstore types not supported by the Go firestore client, cloud.google.com/go/firestore:
-//  - unsigned integers: encoded is int64s
-//  - arrays: encoded as Firestore array values
+//   - unsigned integers: encoded is int64s
+//   - arrays: encoded as Firestore array values
 //
 // Firestore types not supported by Docstore:
-//  - Document reference (a pointer to another Firestore document)
+//   - Document reference (a pointer to another Firestore document)
 //
-//
-// URLs
+// # URLs
 //
 // For docstore.OpenCollection, gcpfirestore registers for the scheme
 // "firestore".
@@ -35,20 +34,18 @@
 // see URLOpener.
 // See https://gocloud.dev/concepts/urls/ for background information.
 //
-//
-// As
+// # As
 //
 // gcpfirestore exposes the following types for as functions.
 // The pb package is google.golang.org/genproto/googleapis/firestore/v1.
 // The firestore  package is cloud.google.com/go/firestore/apiv1.
-//  - Collection.As: *firestore.Client
-//  - ActionList.BeforeDo: *pb.BatchGetDocumentsRequest or *pb.CommitRequest.
-//  - Query.BeforeQuery: *pb.RunQueryRequest
-//  - DocumentIterator: firestore.Firestore_RunQueryClient
-//  - Error: *google.golang.org/grpc/status.Status
+//   - Collection.As: *firestore.Client
+//   - ActionList.BeforeDo: *pb.BatchGetDocumentsRequest or *pb.CommitRequest.
+//   - Query.BeforeQuery: *pb.RunQueryRequest
+//   - DocumentIterator: firestore.Firestore_RunQueryClient
+//   - Error: *google.golang.org/grpc/status.Status
 //
-//
-// Queries
+// # Queries
 //
 // Firestore allows only one field in a query to be compared with an inequality
 // operator (one other than "="). This driver selects the first field in a Where
@@ -76,8 +73,7 @@ import (
 	"strings"
 
 	vkit "cloud.google.com/go/firestore/apiv1"
-	"github.com/golang/protobuf/proto"
-	tspb "github.com/golang/protobuf/ptypes/timestamp"
+	pb "cloud.google.com/go/firestore/apiv1/firestorepb"
 	"github.com/google/wire"
 	"gocloud.dev/docstore"
 	"gocloud.dev/docstore/driver"
@@ -86,10 +82,12 @@ import (
 	"gocloud.dev/internal/gcerr"
 	"gocloud.dev/internal/useragent"
 	"google.golang.org/api/option"
-	pb "google.golang.org/genproto/googleapis/firestore/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	tspb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Dial returns a client to use with Firestore and a clean-up function to close
@@ -101,7 +99,8 @@ func Dial(ctx context.Context, ts gcp.TokenSource) (*vkit.Client, func(), error)
 		useragent.ClientOption("docstore"),
 	}
 	if host := os.Getenv("FIRESTORE_EMULATOR_HOST"); host != "" {
-		conn, err := grpc.DialContext(ctx, host, grpc.WithInsecure())
+		conn, err := grpc.DialContext(ctx, host,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -152,6 +151,12 @@ func CollectionResourceID(projectID, collPath string) string {
 	return fmt.Sprintf("projects/%s/databases/(default)/documents/%s", projectID, collPath)
 }
 
+// CollectResoureceIDWithDatabase constructs a resource ID for a collection from the project ID, database ID, and the collection path.
+// See the OpenCollection example for use.
+func CollectionResourceIDWithDatabase(projectID, databaseID, collPath string) string {
+	return fmt.Sprintf("projects/%s/databases/%s/documents/%s", projectID, databaseID, collPath)
+}
+
 // OpenCollection creates a *docstore.Collection representing a Firestore collection.
 //
 // collResourceID must be of the form "project/<projectID>/databases/(default)/documents/<collPath>".
@@ -196,7 +201,7 @@ func OpenCollectionWithNameFunc(client *vkit.Client, collResourceID string, name
 	return docstore.NewCollection(c), nil
 }
 
-var resourceIDRE = regexp.MustCompile(`^(projects/[^/]+/databases/\(default\))/documents/.+`)
+var resourceIDRE = regexp.MustCompile(`^(projects/[^/]+/databases/[^/]+)/documents/.+`)
 
 func newCollection(client *vkit.Client, collResourceID, nameField string, nameFunc func(docstore.Document) string, opts *Options) (*collection, error) {
 	if nameField == "" && nameFunc == nil {
@@ -260,7 +265,7 @@ func (c *collection) RevisionField() string {
 // RunActions implements driver.RunActions.
 func (c *collection) RunActions(ctx context.Context, actions []*driver.Action, opts *driver.RunActionsOptions) driver.ActionListError {
 	errs := make([]error, len(actions))
-	beforeGets, gets, writes, afterGets := driver.GroupActions(actions)
+	beforeGets, gets, writes, _, afterGets := driver.GroupActions(actions)
 	calls := c.buildCommitCalls(writes, errs)
 	// runGets does not issue concurrent RPCs, so it doesn't need a throttle.
 	c.runGets(ctx, beforeGets, errs, opts)
@@ -599,7 +604,6 @@ func (c *collection) doCommitCall(ctx context.Context, call *commitCall, errs []
 			j++
 		}
 	}
-	return
 }
 
 func hasFollowingTransform(writes []*pb.Write, i int) bool {

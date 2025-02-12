@@ -18,15 +18,15 @@
 //
 // See https://gocloud.dev/howto/secrets/ for a detailed how-to guide.
 //
-//
-// OpenCensus Integration
+// # OpenCensus Integration
 //
 // OpenCensus supports tracing and metric collection for multiple languages and
 // backend providers. See https://opencensus.io.
 //
 // This API collects OpenCensus traces and metrics for the following methods:
-//  - Encrypt
-//  - Decrypt
+//   - Encrypt
+//   - Decrypt
+//
 // All trace and metric names begin with the package import path.
 // The traces add the method name.
 // For example, "gocloud.dev/secrets/Encrypt".
@@ -148,7 +148,7 @@ func (k *Keeper) Close() error {
 //
 // ErrorAs panics if i is nil or not a pointer.
 // ErrorAs returns false if err == nil.
-func (k *Keeper) ErrorAs(err error, i interface{}) bool {
+func (k *Keeper) ErrorAs(err error, i any) bool {
 	return gcerr.ErrorAs(err, i, k.k.ErrorAs)
 }
 

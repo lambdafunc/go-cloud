@@ -19,7 +19,6 @@ package drivertest // import "gocloud.dev/runtimevar/drivertest"
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +94,8 @@ func (verifyAsFailsOnNil) ErrorCheck(v *runtimevar.Variable, err error) (ret err
 // RunConformanceTests runs conformance tests for driver implementations
 // of runtimevar.
 func RunConformanceTests(t *testing.T, newHarness HarnessMaker, asTests []AsTest) {
+	t.Helper()
+
 	t.Run("TestNonExistentVariable", func(t *testing.T) {
 		testNonExistentVariable(t, newHarness)
 	})
@@ -129,14 +130,6 @@ func RunConformanceTests(t *testing.T, newHarness HarnessMaker, asTests []AsTest
 	})
 }
 
-// deadlineExceeded returns true if err represents a context exceeded error.
-// It can either be a true context.DeadlineExceeded, or an RPC aborted due to
-// ctx cancellation; we don't have a good way of checking for the latter
-// explicitly so we check the Error() string.
-func deadlineExceeded(err error) bool {
-	return err == context.DeadlineExceeded || strings.Contains(err.Error(), "context deadline exceeded")
-}
-
 // waitTimeForBlockingCheck returns a duration to wait when verifying that a
 // call blocks. When in replay mode, it can be quite short to make tests run
 // quickly. When in record mode, it has to be long enough that RPCs can
@@ -149,6 +142,8 @@ func waitTimeForBlockingCheck() time.Duration {
 }
 
 func testNonExistentVariable(t *testing.T, newHarness HarnessMaker) {
+	t.Helper()
+
 	h, err := newHarness(t)
 	if err != nil {
 		t.Fatal(err)
@@ -175,6 +170,8 @@ func testNonExistentVariable(t *testing.T, newHarness HarnessMaker) {
 }
 
 func testString(t *testing.T, newHarness HarnessMaker) {
+	t.Helper()
+
 	const (
 		name    = "test-config-variable"
 		content = "hello world"
@@ -233,8 +230,8 @@ func testString(t *testing.T, newHarness HarnessMaker) {
 	// RPC error during record. During replay, that error can be returned
 	// immediately (before tCtx is cancelled). So, we accept deadline exceeded
 	// errors as well.
-	if tCtx.Err() == nil && !deadlineExceeded(err) {
-		t.Errorf("got err %v; want Watch to have blocked until context was Done, or for the error to be deadline exceeded", err)
+	if tCtx.Err() == nil && gcerrors.Code(err) != gcerrors.DeadlineExceeded {
+		t.Errorf("got err %v/%v; want Watch to have blocked until context was Done, or for the error to be deadline exceeded", err, gcerrors.Code(err))
 	}
 }
 
@@ -244,6 +241,8 @@ type Message struct {
 }
 
 func testJSON(t *testing.T, newHarness HarnessMaker) {
+	t.Helper()
+
 	const (
 		name        = "test-config-variable"
 		jsonContent = `[
@@ -295,6 +294,8 @@ func testJSON(t *testing.T, newHarness HarnessMaker) {
 }
 
 func testInvalidJSON(t *testing.T, newHarness HarnessMaker) {
+	t.Helper()
+
 	const (
 		name    = "test-config-variable"
 		content = "not-json"
@@ -336,6 +337,8 @@ func testInvalidJSON(t *testing.T, newHarness HarnessMaker) {
 }
 
 func testUpdate(t *testing.T, newHarness HarnessMaker) {
+	t.Helper()
+
 	const (
 		name     = "test-config-variable"
 		content1 = "hello world"
@@ -394,7 +397,7 @@ func testUpdate(t *testing.T, newHarness HarnessMaker) {
 		// OK
 	} else {
 		got, err = unchangedState.Value()
-		if err != context.DeadlineExceeded {
+		if gcerrors.Code(err) != gcerrors.DeadlineExceeded {
 			t.Fatalf("got state %v/%v/%v, wanted nil or nil/DeadlineExceeded after no change", got, err, gcerrors.Code(err))
 		}
 	}
@@ -404,6 +407,15 @@ func testUpdate(t *testing.T, newHarness HarnessMaker) {
 		t.Fatal(err)
 	}
 	state, _ = drv.WatchVariable(ctx, state)
+	// In rare race conditions during replay, if the earlier WatchVariable
+	// was cancelled/timed out before actually calling an RPC, this one
+	// might have returned the old/unchanged value. This only happens during
+	// replay mode. Just try again, the next RPC should get the updated value.
+	// BTW this is easy to reproduce by setting the timeout in
+	// waitForBlockingCheck to 1 nanosecond.
+	if state == nil && !*setup.Record {
+		state, _ = drv.WatchVariable(ctx, state)
+	}
 	if state == nil {
 		t.Fatalf("got nil state, want a non-nil state with a value")
 	}
@@ -419,6 +431,8 @@ func testUpdate(t *testing.T, newHarness HarnessMaker) {
 }
 
 func testDelete(t *testing.T, newHarness HarnessMaker) {
+	t.Helper()
+
 	const (
 		name     = "test-config-variable"
 		content1 = "hello world"
@@ -512,6 +526,8 @@ func testDelete(t *testing.T, newHarness HarnessMaker) {
 }
 
 func testUpdateWithErrors(t *testing.T, newHarness HarnessMaker) {
+	t.Helper()
+
 	const (
 		name     = "test-updating-variable-to-error"
 		content1 = `[{"Name": "Foo", "Text": "Bar"}]`
@@ -599,14 +615,16 @@ func testUpdateWithErrors(t *testing.T, newHarness HarnessMaker) {
 		// RPC error during record. During replay, that error can be returned
 		// immediately (before tCtx is cancelled). So, we accept deadline exceeded
 		// errors as well.
-		if tCtx.Err() == nil && !deadlineExceeded(err) {
-			t.Errorf("got err %v; want Watch to have blocked until context was Done, or for the error to be deadline exceeded", err)
+		if tCtx.Err() == nil && gcerrors.Code(err) != gcerrors.DeadlineExceeded {
+			t.Errorf("got err %v/%v; want Watch to have blocked until context was Done, or for the error to be deadline exceeded", err, gcerrors.Code(err))
 		}
 	}
 }
 
 // testAs tests the various As functions, using AsTest.
 func testAs(t *testing.T, newHarness HarnessMaker, st AsTest) {
+	t.Helper()
+
 	const (
 		name    = "variable-for-as"
 		content = "hello world"

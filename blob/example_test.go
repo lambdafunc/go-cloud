@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -404,7 +403,7 @@ func ExampleWriterOptions() {
 	}
 	defer b.Close()
 
-	beforeWrite := func(as func(interface{}) bool) error {
+	beforeWrite := func(as func(any) bool) error {
 		var sw *storage.Writer
 		if as(&sw) {
 			fmt.Println(sw.ChunkSize)
@@ -463,7 +462,7 @@ func ExampleListOptions() {
 	}
 	defer b.Close()
 
-	beforeList := func(as func(interface{}) bool) error {
+	beforeList := func(as func(any) bool) error {
 		// Access storage.Query via q here.
 		var q *storage.Query
 		if as(&q) {
@@ -500,6 +499,22 @@ func ExamplePrefixedBucket() {
 	defer bucket.Close()
 
 	// Bucket operations on <key> will be translated to "a/subfolder/<key>".
+}
+
+func ExampleSingleKeyBucket() {
+	// PRAGMA: This example is used on gocloud.dev; PRAGMA comments adjust how it is shown and can be ignored.
+	// PRAGMA: On gocloud.dev, hide lines until the next blank line.
+	var bucket *blob.Bucket
+
+	// Wrap the bucket using blob.SingleKeyBucket.
+	// The bucket always references the provided key.
+	bucket = blob.SingleKeyBucket(bucket, "foo.txt")
+
+	// The original bucket is no longer usable; it has been closed.
+	// The wrapped bucket should be closed when done.
+	defer bucket.Close()
+
+	// Bucket operations will ignore the passed-in key and always reference foo.txt.
 }
 
 func ExampleReader_As() {
@@ -554,7 +569,7 @@ func ExampleAttributes_As() {
 }
 
 func newTempDir() (string, func()) {
-	dir, err := ioutil.TempDir("", "go-cloud-blob-example")
+	dir, err := os.MkdirTemp("", "go-cloud-blob-example")
 	if err != nil {
 		panic(err)
 	}

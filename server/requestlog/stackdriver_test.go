@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,11 +75,11 @@ func TestStackdriverLog(t *testing.T) {
 		t.Fatal("Unmarshal:", err)
 	}
 
-	var r map[string]interface{}
+	var r map[string]any
 	if err := json.Unmarshal(got, &r); err != nil {
 		t.Error("Unmarshal record:", err)
 	} else {
-		rr, _ := r["httpRequest"].(map[string]interface{})
+		rr, _ := r["httpRequest"].(map[string]any)
 		if rr == nil {
 			t.Error("httpRequest does not exist in record or is not a JSON object")
 		}
@@ -111,7 +110,7 @@ func TestStackdriverLog(t *testing.T) {
 		if got, want := jsonString(rr, "latency"), "5.123456789"; parseLatency(got) != want {
 			t.Errorf("httpRequest.latency = %q; want %q", got, want+"s")
 		}
-		ts, _ := r["timestamp"].(map[string]interface{})
+		ts, _ := r["timestamp"].(map[string]any)
 		if ts == nil {
 			t.Error("timestamp does not exist in record or is not a JSON object")
 		}
@@ -144,12 +143,12 @@ func parseLatency(s string) string {
 	return s
 }
 
-func jsonString(obj map[string]interface{}, k string) string {
+func jsonString(obj map[string]any, k string) string {
 	v, _ := obj[k].(string)
 	return v
 }
 
-func jsonNumber(obj map[string]interface{}, k string) float64 {
+func jsonNumber(obj map[string]any, k string) float64 {
 	v, _ := obj[k].(float64)
 	return v
 }
@@ -179,7 +178,7 @@ func BenchmarkStackdriverLog(b *testing.B) {
 	buf.Reset()
 	b.ResetTimer()
 
-	l = NewStackdriverLogger(ioutil.Discard, func(error) {})
+	l = NewStackdriverLogger(io.Discard, func(error) {})
 	for i := 0; i < b.N; i++ {
 		l.Log(ent)
 	}
@@ -187,6 +186,8 @@ func BenchmarkStackdriverLog(b *testing.B) {
 
 func BenchmarkE2E(b *testing.B) {
 	run := func(b *testing.B, handler http.Handler) {
+		b.Helper()
+
 		s := httptest.NewServer(handler)
 		defer s.Close()
 		b.ReportAllocs()
@@ -195,7 +196,7 @@ func BenchmarkE2E(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			io.Copy(ioutil.Discard, resp.Body)
+			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 		}
 	}
@@ -203,7 +204,7 @@ func BenchmarkE2E(b *testing.B) {
 		run(b, http.HandlerFunc(benchHandler))
 	})
 	b.Run("WithLog", func(b *testing.B) {
-		l := NewStackdriverLogger(ioutil.Discard, func(error) {})
+		l := NewStackdriverLogger(io.Discard, func(error) {})
 		run(b, NewHandler(l, http.HandlerFunc(benchHandler)))
 	})
 }
